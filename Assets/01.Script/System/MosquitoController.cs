@@ -1,13 +1,14 @@
+using System;
 using System.Collections;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
 public enum MosquitoState
 {
-    Flying,          // 자유 비행
-    SkillChecking,   // QTE 진행 중
-    Feeding,         // 흡혈 진행 중
-    Stunned          // 손바닥에 피격되어 스턴
+    Flying,          // 공중 비행
+    SkillChecking,   // QTE 스킬체크 진행 중
+    Feeding,         // 피부 안착 및 흡혈 가능 상태
+    Stunned          // 손바닥 피격 스턴
 }
 
 [RequireComponent(typeof(Rigidbody2D), typeof(PlayerInput))]
@@ -25,32 +26,38 @@ public class MosquitoController : MonoBehaviour
     [SerializeField] private LayerMask humanSkinLayer;
     [SerializeField] private float landingRadius = 0.8f;
 
-    [Header("공중 체류(Linger) 공격 감지 설정")]
-    [SerializeField] private float lingerCheckInterval = 1.0f; // 비행 중 몇 초마다 체류 위험을 연산할 것인가
+    [Header("공중 체류 공격 감지 설정")]
+    [SerializeField] private float lingerCheckInterval = 1.0f;
     private float lingerTimer = 0f;
 
-    [Header("흡혈 및 스킬체크 설정")]
+    [Header("스킬 체크 & 흡혈 설정")]
     [SerializeField] private int requiredSkillChecks = 2;
     private int currentSkillCheckCount = 0;
+
     [SerializeField] private float maxBlood = 100f;
-    private float currentBlood = 0f;
-    [SerializeField] private float suckRate = 20f;
-    private bool isSucking = false;
+    [SerializeField] private float currentBlood = 0f;
+    [SerializeField] private float suckRate = 25f; // 초당 흡혈량 ($R_{\text{suck}}$)
+
+    // [핵심] 좌클릭 누름 유무를 판별하는 플래그
+    [SerializeField] private bool isSucking = false;
 
     [Header("흡혈 중 기습 공격 타이머")]
-    [SerializeField] private float feedingCheckInterval = 1.5f;
+    [SerializeField] private float feedingCheckInterval = 1.0f;
     private float feedingTimer = 0f;
-    private float currentZoneDangerRatio = 0f; // 현재 안착한 부위의 위험도 (0.0~1.0)
+    private float currentZoneDangerRatio = 0f;
 
-    // 캐싱 컴포넌트
+    // UI 동기화 이벤트 (현재 혈액량, 최대 혈액량)
+    public event Action<float, float> OnBloodAmountChanged;
+
+    // 컴포넌트 캐싱
     private Rigidbody2D rb;
     private PlayerInput playerInput;
     private Animator animator;
     private Vector2 moveInput;
 
     private InputAction checkAction;
-    private InputAction suckAction;
-    private InputAction takeOffAction;
+    private InputAction suckAction;      // 좌클릭 흡혈 액션
+    private InputAction takeOffAction;   // 이륙 액션
 
     private static readonly int HashIsFlying = Animator.StringToHash("IsFlying");
     private static readonly int HashIsFeeding = Animator.StringToHash("IsFeeding");
@@ -75,10 +82,12 @@ public class MosquitoController : MonoBehaviour
     {
         if (checkAction != null) checkAction.performed += OnCheckInputReceived;
         if (takeOffAction != null) takeOffAction.performed += OnTakeOffInputReceived;
+
+        // 좌클릭 눌렀을 때와 뗐을 때 이벤트 바인딩
         if (suckAction != null)
         {
-            suckAction.started += OnSuckStarted;
-            suckAction.canceled += OnSuckCanceled;
+            suckAction.started += OnSuckStarted;   // 좌클릭 눌림 시작
+            suckAction.canceled += OnSuckCanceled; // 좌클릭 뗌
         }
     }
 
@@ -86,6 +95,7 @@ public class MosquitoController : MonoBehaviour
     {
         if (checkAction != null) checkAction.performed -= OnCheckInputReceived;
         if (takeOffAction != null) takeOffAction.performed -= OnTakeOffInputReceived;
+
         if (suckAction != null)
         {
             suckAction.started -= OnSuckStarted;
@@ -97,6 +107,7 @@ public class MosquitoController : MonoBehaviour
     {
         SwitchActionMapSafely("Flying");
         UpdateAnimationState();
+        OnBloodAmountChanged?.Invoke(currentBlood, maxBlood);
     }
 
     private void FixedUpdate()
@@ -119,53 +130,124 @@ public class MosquitoController : MonoBehaviour
 
     private void Update()
     {
-        // 1. 공중 비행(`Flying`) 중 영역 체류 시 사람 공격 확률 체크 (패턴 2)
         if (currentState == MosquitoState.Flying)
         {
             EvaluateFlyingLingerAttack();
         }
-        // 2. 흡혈(`Feeding`) 중 위험도 누적 공격 체크 (패턴 3)
         else if (currentState == MosquitoState.Feeding)
         {
-            if (isSucking) ProcessBloodSucking();
+            // [수동 흡혈] 좌클릭을 누르고 있는 동안(isSucking == true)에만 흡혈 처리
+            if (isSucking)
+            {
+                ProcessBloodSucking();
+            }
+
+            // 피를 빠는 도중에만 위험도 판정을 강화해 기습 공격 체크
             EvaluateFeedingDangerAttack();
         }
     }
 
-    #region Attack Pattern Evaluators (핵심 패턴 연산)
+    #region 수동 흡혈 입력 및 코어 연산
 
     /// <summary>
-    /// [패턴 2] 공중에서 비행만 하며 정체되어 있을 때 영역 확률 기반 기습 공격
+    /// 좌클릭을 누르기 시작했을 때 (InputAction.started)
     /// </summary>
+    private void OnSuckStarted(InputAction.CallbackContext context)
+    {
+        if (currentState != MosquitoState.Feeding) return;
+
+        isSucking = true;
+        UpdateAnimationState();
+        Debug.Log("<color=red>[흡혈 중...] 좌클릭 홀드: 피를 빨기 시작합니다!</color>");
+    }
+
+    /// <summary>
+    /// 좌클릭에서 손을 뗐을 때 (InputAction.canceled)
+    /// </summary>
+    private void OnSuckCanceled(InputAction.CallbackContext context)
+    {
+        if (currentState != MosquitoState.Feeding) return;
+
+        isSucking = false;
+        UpdateAnimationState();
+        Debug.Log("<color=yellow>[흡혈 중단] 좌클릭 해제: 흡혈을 일시 멈춥니다.</color>");
+    }
+
+    /// <summary>
+    /// 스킬체크 성공 후 흡혈 가능 단계로 진입하는 함수
+    /// </summary>
+    private void StartFeedingSequence()
+    {
+        currentState = MosquitoState.Feeding;
+        feedingTimer = 0f;
+
+        // [수정] 자동 흡혈 방지! 좌클릭을 누르기 전까지는 대기 상태
+        isSucking = false;
+
+        SwitchActionMapSafely("Feeding");
+        UpdateAnimationState();
+
+        Debug.Log("<color=green>[안착 완료] 좌클릭을 꾹 눌러 피를 빠세요!</color>");
+    }
+
+    /// <summary>
+    /// 프레임 단위 실시간 흡혈 연산
+    /// </summary>
+    private void ProcessBloodSucking()
+    {
+        if (currentBlood < maxBlood)
+        {
+            // $B(t + \Delta t) = \min(B_{\max}, B(t) + R_{\text{suck}} \cdot \Delta t)$
+            currentBlood += suckRate * Time.deltaTime;
+            currentBlood = Mathf.Min(currentBlood, maxBlood);
+
+            OnBloodAmountChanged?.Invoke(currentBlood, maxBlood);
+
+            // 피가 $100\%$ 다 차면 자동으로 완료 처리 후 이륙
+            if (Mathf.Approximately(currentBlood, maxBlood))
+            {
+                OnFeedingCompleted();
+            }
+        }
+    }
+
+    private void OnFeedingCompleted()
+    {
+        Debug.Log("<color=cyan>[흡혈 완수!] 피를 최대로 채워 자동으로 이륙합니다.</color>");
+        isSucking = false;
+        currentState = MosquitoState.Flying;
+
+        SwitchActionMapSafely("Flying");
+        UpdateAnimationState();
+    }
+
+    #endregion
+
+    #region 기습 공격 및 스턴 연산
+
     private void EvaluateFlyingLingerAttack()
     {
         lingerTimer += Time.deltaTime;
         if (lingerTimer < lingerCheckInterval) return;
         lingerTimer = 0f;
 
-        // 현재 모기 주변에 있는 피부 감지
         Collider2D hit = Physics2D.OverlapCircle(transform.position, landingRadius, humanSkinLayer);
         if (hit != null)
         {
             IBodyPartZone zone = hit.GetComponent<IBodyPartZone>() ?? hit.GetComponentInParent<IBodyPartZone>();
             if (zone != null)
             {
-                // 확률 연산: $P = P_{\text{zone}} \times M_{\text{anger}} \times 0.25$
                 float angerMult = HumanAngerManager.Instance != null ? HumanAngerManager.Instance.CurrentAngerMultiplier : 1f;
                 float attackProbability = zone.DangerProbability * angerMult * 0.25f;
 
-                if (Random.value <= attackProbability)
+                if (UnityEngine.Random.value <= attackProbability)
                 {
-                    Debug.LogWarning($"<color=red>[기습] 비행 중 오래 얼씬거려 사람이 손을 휘두릅니다! (확률: {attackProbability * 100f:F1}%)</color>");
                     HumanAngerManager.Instance?.TriggerAttack(transform.position);
                 }
             }
         }
     }
 
-    /// <summary>
-    /// [패턴 3] 흡혈 중 누적 위험도 기반 공격 확률 체크
-    /// </summary>
     private void EvaluateFeedingDangerAttack()
     {
         feedingTimer += Time.deltaTime;
@@ -173,18 +255,18 @@ public class MosquitoController : MonoBehaviour
         feedingTimer = 0f;
 
         float angerMult = HumanAngerManager.Instance != null ? HumanAngerManager.Instance.CurrentAngerMultiplier : 1f;
-        float attackProb = currentZoneDangerRatio * angerMult * 0.4f;
 
-        if (Random.value <= attackProb)
+        // 피를 빠는 중(isSucking)이면 위험 배율 2배 증가!
+        float suckRiskMultiplier = isSucking ? 2.0f : 0.5f;
+        float attackProb = currentZoneDangerRatio * angerMult * 0.3f * suckRiskMultiplier;
+
+        if (UnityEngine.Random.value <= attackProb)
         {
-            Debug.LogWarning($"<color=red>[기습] 피를 빨리는 통증을 느끼고 사람이 손을 내리칩니다!</color>");
+            Debug.LogWarning("<color=red>[위협 감지] 흡혈 통증으로 사람이 손을 내리칩니다!</color>");
             HumanAngerManager.Instance?.TriggerAttack(transform.position);
         }
     }
 
-    /// <summary>
-    /// 손바닥 타격 판정에 최종 피격당했을 때 호출
-    /// </summary>
     public void OnHitByHumanHand()
     {
         StopAllCoroutines();
@@ -194,13 +276,12 @@ public class MosquitoController : MonoBehaviour
     private IEnumerator StunAndKnockbackRoutine()
     {
         currentState = MosquitoState.Stunned;
-        Debug.LogError("<color=red>[피격!] 손바닥에 맞아 스턴 상태가 되었습니다!</color>");
+        isSucking = false; // 피격 시 흡혈 상태 해제
 
-        // 강제 넉백 물리 부여
-        Vector2 knockbackDir = (Random.insideUnitCircle + Vector2.up).normalized;
+        Vector2 knockbackDir = (UnityEngine.Random.insideUnitCircle + Vector2.up).normalized;
         rb.linearVelocity = knockbackDir * 7f;
 
-        yield return new WaitForSeconds(1.0f); // 1초간 정신 못 차림
+        yield return new WaitForSeconds(1.0f);
 
         currentState = MosquitoState.Flying;
         SwitchActionMapSafely("Flying");
@@ -209,7 +290,7 @@ public class MosquitoController : MonoBehaviour
 
     #endregion
 
-    #region Input Handlers & State Transitions
+    #region Input & QTE Handlers
 
     public void OnMove(InputAction.CallbackContext context)
     {
@@ -255,33 +336,23 @@ public class MosquitoController : MonoBehaviour
         else if (result == SkillCheckUI.SkillCheckResult.Success)
         {
             currentSkillCheckCount++;
-            if (currentSkillCheckCount >= requiredSkillChecks) StartFeedingSequence();
-            else SkillCheckUI.Instance.BeginSkillCheck(1.3f, OnDbdSkillCheckCompleted);
+
+            if (currentSkillCheckCount >= requiredSkillChecks)
+            {
+                StartFeedingSequence(); // 스킬체크 2회 성공 시 안착 및 흡혈 대기 모드 진입
+            }
+            else
+            {
+                SkillCheckUI.Instance.BeginSkillCheck(1.3f, OnDbdSkillCheckCompleted);
+            }
         }
-        else // [패턴 1] 스킬체크 실패 -> 즉시 공격 발동!
+        else // Fail
         {
-            Debug.LogWarning("<color=red>[스킬체크 실패!] 사람 공격 트리거 즉시 발동!</color>");
             HumanAngerManager.Instance?.TriggerAttack(transform.position);
 
             currentState = MosquitoState.Flying;
             SwitchActionMapSafely("Flying");
             UpdateAnimationState();
-        }
-    }
-
-    private void StartFeedingSequence()
-    {
-        currentState = MosquitoState.Feeding;
-        feedingTimer = 0f;
-        SwitchActionMapSafely("Feeding");
-        UpdateAnimationState();
-    }
-
-    private void ProcessBloodSucking()
-    {
-        if (currentBlood < maxBlood)
-        {
-            currentBlood = Mathf.Min(currentBlood + suckRate * Time.deltaTime, maxBlood);
         }
     }
 
@@ -291,28 +362,12 @@ public class MosquitoController : MonoBehaviour
             SkillCheckUI.Instance.OnInputPressed();
     }
 
-    private void OnSuckStarted(InputAction.CallbackContext context)
+    private void OnTakeOffInputReceived(InputAction.CallbackContext context)
     {
-        if (currentState == MosquitoState.Feeding)
-        {
-            isSucking = true;
-            if (animator != null) animator.SetBool(HashIsSucking, true);
-        }
-    }
-
-    private void OnSuckCanceled(InputAction.CallbackContext context)
-    {
+        // 흡혈 상태일 때 수동 이륙 기능
         if (currentState == MosquitoState.Feeding)
         {
             isSucking = false;
-            if (animator != null) animator.SetBool(HashIsSucking, false);
-        }
-    }
-
-    private void OnTakeOffInputReceived(InputAction.CallbackContext context)
-    {
-        if (currentState == MosquitoState.Feeding && !isSucking)
-        {
             currentState = MosquitoState.Flying;
             SwitchActionMapSafely("Flying");
             UpdateAnimationState();
@@ -324,11 +379,7 @@ public class MosquitoController : MonoBehaviour
         if (animator == null) return;
         animator.SetBool(HashIsFlying, currentState == MosquitoState.Flying);
         animator.SetBool(HashIsFeeding, currentState == MosquitoState.Feeding);
-        if (currentState != MosquitoState.Feeding)
-        {
-            isSucking = false;
-            animator.SetBool(HashIsSucking, false);
-        }
+        animator.SetBool(HashIsSucking, isSucking);
     }
 
     private void SwitchActionMapSafely(string mapName)

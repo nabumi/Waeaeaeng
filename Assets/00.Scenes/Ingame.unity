@@ -727,7 +727,9 @@ MonoBehaviour:
   lingerCheckInterval: 1
   requiredSkillChecks: 2
   maxBlood: 100
+  currentBlood: 0
   suckRate: 20
+  isSucking: 0
   feedingCheckInterval: 1.5
 --- !u!50 &636591782
 Rigidbody2D:
@@ -1181,14 +1183,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ac4b45b698f670647add6b41524307df, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HumanAngerManager
-  worldCanvas: {fileID: 757451461}
+  targetCanvas: {fileID: 757451461}
   handAttackUIPrefab: {fileID: 7994617563585101885, guid: 8bd01b14b9793f34791d5e21dd88b52d, type: 3}
   baseFillDuration: 1.2
   minFillDuration: 0.35
   attackRadius: 1.2
   mosquitoLayer:
     serializedVersion: 2
-    m_Bits: 8
+    m_Bits: 32
   angerPerDodge: 0.25
 --- !u!1 &1237703961
 GameObject:
@@ -1304,7 +1306,7 @@ RectTransform:
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 300, y: 300}
+  m_SizeDelta: {x: 265, y: 265}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1344016226
 MonoBehaviour:
@@ -1326,7 +1328,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 10913, guid: 0000000000000000f000000000000000, type: 0}
+  m_Sprite: {fileID: -9599951, guid: 910f3ec5eba74204994264c5f73cdb2c, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -1400,7 +1402,7 @@ MonoBehaviour:
   successZoneImage: {fileID: 1502648009}
   greatZoneImage: {fileID: 1913268858}
   markerRectTransform: {fileID: 526635397}
-  trackRadius: 150
+  trackRadius: 132.5
   baseRotationSpeed: 240
   minSpeedMultiplier: 0.5
   maxSpeedMultiplier: 1.5
@@ -1558,7 +1560,7 @@ RectTransform:
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 280, y: 280}
+  m_SizeDelta: {x: 265, y: 265}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1502648009
 MonoBehaviour:
@@ -1573,14 +1575,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_Color: {r: 0, g: 1, b: 0.11251104, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 10913, guid: 0000000000000000f000000000000000, type: 0}
+  m_Sprite: {fileID: -9599951, guid: 910f3ec5eba74204994264c5f73cdb2c, type: 3}
   m_Type: 3
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -2072,7 +2074,7 @@ RectTransform:
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 280, y: 280}
+  m_SizeDelta: {x: 265, y: 265}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1913268858
 MonoBehaviour:
@@ -2087,14 +2089,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_Color: {r: 0.013790965, g: 0, b: 1, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 10913, guid: 0000000000000000f000000000000000, type: 0}
+  m_Sprite: {fileID: 1323836345, guid: 7736b7e6bf293be42be80cb655fad658, type: 3}
   m_Type: 3
   m_PreserveAspect: 0
   m_FillCenter: 1
