@@ -53,57 +53,13 @@ public class HandAttackUIController : MonoBehaviour
         this.mainCamera = Camera.main != null ? Camera.main : FindAnyObjectByType<Camera>();
 
         // Z축 랜덤 회전 적용
-        transform.localRotation = Quaternion.Euler(0f, 0f, zRotationAngle);
-
-        // 자동 바인딩 보강
-        if (shadowRectTransform == null)
+        RectTransform rectTransform = GetComponent<RectTransform>();
+        if (rectTransform != null)
         {
-            var sTrans = transform.Find("Shadow_Graphic");
-            if (sTrans != null) shadowRectTransform = sTrans as RectTransform;
-        }
-        if (shadowImage == null && shadowRectTransform != null)
-        {
-            shadowImage = shadowRectTransform.GetComponent<Image>();
-        }
-        if (handGraphicObject == null)
-        {
-            var hTrans = transform.Find("Hand_Graphic");
-            if (hTrans != null) handGraphicObject = hTrans.gameObject;
-        }
-        if (hitEffectObject == null)
-        {
-            var eTrans = transform.Find("Hit_Effect");
-            if (eTrans != null) hitEffectObject = eTrans.gameObject;
-        }
-
-        // 크기(SizeDelta) 보정 (화면에 뚜렷하게 보이도록 최소 450x600 보장)
-        Vector2 defaultHandSize = new Vector2(450f, 600f);
-        if (shadowRectTransform != null && shadowRectTransform.sizeDelta.x < 100f)
-        {
-            shadowRectTransform.sizeDelta = defaultHandSize;
-        }
-        if (handGraphicObject != null)
-        {
-            var hRect = handGraphicObject.GetComponent<RectTransform>();
-            if (hRect != null && hRect.sizeDelta.x < 100f) hRect.sizeDelta = defaultHandSize;
-        }
-        if (hitEffectObject != null)
-        {
-            var eRect = hitEffectObject.GetComponent<RectTransform>();
-            if (eRect != null && eRect.sizeDelta.x < 100f) eRect.sizeDelta = new Vector2(300f, 300f);
+            rectTransform.localRotation = Quaternion.Euler(0f, 0f, zRotationAngle);
         }
 
         // 초기 오브젝트 상태 정리
-        if (shadowRectTransform != null)
-        {
-            shadowRectTransform.gameObject.SetActive(true);
-            if (shadowImage != null)
-            {
-                Color c = shadowImage.color;
-                c.a = 0.35f;
-                shadowImage.color = c;
-            }
-        }
         if (handGraphicObject != null) handGraphicObject.SetActive(false);
         if (hitEffectObject != null) hitEffectObject.SetActive(false);
 
@@ -191,8 +147,7 @@ public class HandAttackUIController : MonoBehaviour
             }
         }
 
-        // 손바닥 타격 피크 프레임에서 히트 판정 콜백 호출 및 타격음 재생
-        AudioManager.Instance?.PlaySFX(AudioManager.SFXType.Slap);
+        // 손바닥 타격 피크 프레임에서 히트 판정 콜백 호출
         onHitImpact?.Invoke();
 
         // ------------------------------------------------------------------
@@ -218,31 +173,26 @@ public class HandAttackUIController : MonoBehaviour
     {
         if (parentCanvas == null || mainCamera == null) return;
 
-        RectTransform rectTransform = transform as RectTransform;
+        RectTransform rectTransform = GetComponent<RectTransform>();
 
         if (parentCanvas.renderMode == RenderMode.ScreenSpaceOverlay)
         {
-            Vector3 screenPos = mainCamera.WorldToScreenPoint(targetWorldPosition);
-            if (rectTransform != null) rectTransform.position = screenPos;
-            else transform.position = screenPos;
+            rectTransform.position = mainCamera.WorldToScreenPoint(targetWorldPosition);
         }
         else if (parentCanvas.renderMode == RenderMode.ScreenSpaceCamera)
         {
             Camera renderCam = parentCanvas.worldCamera != null ? parentCanvas.worldCamera : mainCamera;
-            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(
                 parentCanvas.transform as RectTransform,
                 mainCamera.WorldToScreenPoint(targetWorldPosition),
                 renderCam,
                 out Vector2 localPoint
-            ))
-            {
-                if (rectTransform != null) rectTransform.anchoredPosition = localPoint;
-                else transform.localPosition = localPoint;
-            }
+            );
+            rectTransform.anchoredPosition = localPoint;
         }
         else
         {
-            transform.position = targetWorldPosition;
+            rectTransform.position = targetWorldPosition;
         }
     }
 

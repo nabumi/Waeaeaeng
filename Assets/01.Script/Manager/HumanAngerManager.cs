@@ -103,17 +103,12 @@ public class HumanAngerManager : MonoBehaviour
 
         if (targetCanvas == null)
         {
-            targetCanvas = Object.FindAnyObjectByType<Canvas>();
-            if (targetCanvas == null)
-            {
-                Debug.LogError("<color=red>[HumanAngerManager] targetCanvas를 찾을 수 없습니다!</color>");
-                isAttacking = false;
-                yield break;
-            }
+            Debug.LogError("<color=red>[HumanAngerManager] targetCanvas를 찾을 수 없습니다!</color>");
+            isAttacking = false;
+            yield break;
         }
 
-        GameObject handInstance = Instantiate(handAttackUIPrefab, targetCanvas.transform, false);
-        handInstance.transform.SetAsLastSibling(); // 최상단에 렌더링되도록 보장
+        GameObject handInstance = Instantiate(handAttackUIPrefab, targetCanvas.transform);
         float randomAngle = Random.Range(minRotationAngle, maxRotationAngle);
 
         if (handInstance.TryGetComponent<HandAttackUIController>(out var uiController))
@@ -153,13 +148,6 @@ public class HumanAngerManager : MonoBehaviour
 
         if (hitMosquito != null && hitMosquito.TryGetComponent<MosquitoController>(out var mosquito))
         {
-            if (mosquito.IsDashing)
-            {
-                Debug.Log("<color=yellow>[대쉬 회피!] 모기가 대쉬 무적을 이용해 손바닥 공격을 아슬아슬하게 회피했습니다!</color>");
-                OnAttackDodged();
-                return;
-            }
-
             Debug.LogError("<color=red>[찰싹!] 손바닥 타격 성공! (모기 잡힘)</color>");
             mosquito.OnHitByHumanHand();
             ResetAnger();
