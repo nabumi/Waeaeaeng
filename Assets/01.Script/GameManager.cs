@@ -1,8 +1,9 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.InputSystem; // [핵심] New Input System 네임스페이스 추가!
 
 /// <summary>
-/// 전역 게임 상태 관리 및 씬 리셋을 전담하는 매니저 클래스
+/// 전역 게임 상태 관리 및 씬 리셋을 전담하는 매니저 클래스 (New Input System 대응)
 /// </summary>
 public class GameManager : MonoBehaviour
 {
@@ -27,7 +28,7 @@ public class GameManager : MonoBehaviour
 
     private void OnEnable()
     {
-        // MosquitoController 사망 이벤트 정기 구독
+        // MosquitoController 사망 이벤트 구독
         MosquitoController.OnGameOver += OnGameOverTriggered;
     }
 
@@ -39,10 +40,11 @@ public class GameManager : MonoBehaviour
 
     private void Update()
     {
-        // 게임오버 상태일 때 R키를 누르면 씬 리셋
+        // 게임오버 상태일 때 R키 입력 감지
         if (isGameOver)
         {
-            if (Input.GetKeyDown(KeyCode.R))
+            // [핵심 해결] New Input System 전용 키보드 직접 감지 API 사용!
+            if (Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame)
             {
                 RestartCurrentScene();
             }
@@ -68,7 +70,7 @@ public class GameManager : MonoBehaviour
     {
         Debug.Log("<color=green>[System] R키 입력 수신: 씬을 다시 로드합니다...</color>");
 
-        // 혹시 시간 정지(Time.timeScale = 0) 처리를 해뒀더라도 정상 속도로 복구
+        // Time.timeScale 일시정지 상태 해제
         Time.timeScale = 1.0f;
 
         // 현재 active 씬의 이름을 추출하여 재로드

@@ -9,10 +9,11 @@ using UnityEngine.InputSystem;
 public enum MosquitoState
 {
     Flying,          // 공중 비행
+    Landing,         // 피부 안착 중 (새로 추가!)
     SkillChecking,   // QTE 스킬체크 진행 중
-    Feeding,         // 피부 안착 및 흡혈 가능 상태
+    Feeding,         // 흡혈 가능 상태
     Stunned,         // 손바닥 피격 스턴
-    Dead             // 피격 사망 (게임 오버)
+    Dead             // 피격 사망
 }
 
 [RequireComponent(typeof(Rigidbody2D), typeof(PlayerInput))]
@@ -72,6 +73,8 @@ public class MosquitoController : MonoBehaviour
     private static readonly int HashIsFlying = Animator.StringToHash("IsFlying");
     private static readonly int HashIsFeeding = Animator.StringToHash("IsFeeding");
     private static readonly int HashIsSucking = Animator.StringToHash("IsSucking");
+    private static readonly int HashIsChecking = Animator.StringToHash("IsChecking");
+    private static readonly int HashIsLanding = Animator.StringToHash("IsLanding");
 
     private void Awake()
     {
@@ -365,19 +368,37 @@ public class MosquitoController : MonoBehaviour
         if (zone != null)
         {
             currentZoneDangerRatio = zone.DangerProbability;
-            StartSkillCheckSequence(hit, currentZoneDangerRatio);
+
+            // 곧바로 스킬체크로 가지 않고, 먼저 '안착(Landing)' 상태를 거칩니다!
+            StartLandingSequence(hit, currentZoneDangerRatio);
         }
     }
 
-    private void StartSkillCheckSequence(Collider2D skin, float dangerRatio)
+    private void StartLandingSequence(Collider2D skin, float dangerRatio)
     {
         if (isDead) return;
 
+        currentState = MosquitoState.Landing;
+        transform.position = skin.ClosestPoint(transform.position);
+
+        SwitchActionMapSafely("SkillCheck");
+        UpdateAnimationState();
+
+        // 안착 모션이 재생될 시간을 잠깐 준 뒤(예: 0.3초 후) QTE 스킬체크 UI를 띄웁니다.
+        // 코루틴을 활용하면 안착 애니메이션과 QTE를 완벽하게 연동할 수 있습니다!
+        StartCoroutine(WaitLandingAnimationRoutine(dangerRatio));
+    }
+
+    private IEnumerator WaitLandingAnimationRoutine(float dangerRatio)
+    {
+        // 안착 애니메이션이 재생되는 동안 대기 (필요한 시간만큼 조절 가능)
+        yield return new WaitForSeconds(0.3f);
+
+        if (isDead) yield break;
+
+        // 안착이 끝났으니 본격적인 QTE 스킬체크 상태로 전환
         currentState = MosquitoState.SkillChecking;
         currentSkillCheckCount = 0;
-
-        transform.position = skin.ClosestPoint(transform.position);
-        SwitchActionMapSafely("SkillCheck");
         UpdateAnimationState();
 
         if (SkillCheckUI.Instance != null)
@@ -442,7 +463,10 @@ public class MosquitoController : MonoBehaviour
     {
         if (animator == null) return;
 
+        // 각 상태가 오직 하나의 불리언만 정확히 제어하도록 1대1 매핑
         animator.SetBool(HashIsFlying, currentState == MosquitoState.Flying);
+        animator.SetBool(HashIsLanding, currentState == MosquitoState.Landing);       // 오직 안착 상태일 때만!
+        animator.SetBool(HashIsChecking, currentState == MosquitoState.SkillChecking); // 오직 QTE 체크 중일 때만!
         animator.SetBool(HashIsFeeding, currentState == MosquitoState.Feeding);
         animator.SetBool(HashIsSucking, isSucking);
     }
