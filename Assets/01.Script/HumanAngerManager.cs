@@ -103,12 +103,17 @@ public class HumanAngerManager : MonoBehaviour
 
         if (targetCanvas == null)
         {
-            Debug.LogError("<color=red>[HumanAngerManager] targetCanvas를 찾을 수 없습니다!</color>");
-            isAttacking = false;
-            yield break;
+            targetCanvas = Object.FindAnyObjectByType<Canvas>();
+            if (targetCanvas == null)
+            {
+                Debug.LogError("<color=red>[HumanAngerManager] targetCanvas를 찾을 수 없습니다!</color>");
+                isAttacking = false;
+                yield break;
+            }
         }
 
-        GameObject handInstance = Instantiate(handAttackUIPrefab, targetCanvas.transform);
+        GameObject handInstance = Instantiate(handAttackUIPrefab, targetCanvas.transform, false);
+        handInstance.transform.SetAsLastSibling(); // 최상단에 렌더링되도록 보장
         float randomAngle = Random.Range(minRotationAngle, maxRotationAngle);
 
         if (handInstance.TryGetComponent<HandAttackUIController>(out var uiController))

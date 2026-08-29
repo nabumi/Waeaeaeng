@@ -55,7 +55,55 @@ public class HandAttackUIController : MonoBehaviour
         // Z축 랜덤 회전 적용
         transform.localRotation = Quaternion.Euler(0f, 0f, zRotationAngle);
 
+        // 자동 바인딩 보강
+        if (shadowRectTransform == null)
+        {
+            var sTrans = transform.Find("Shadow_Graphic");
+            if (sTrans != null) shadowRectTransform = sTrans as RectTransform;
+        }
+        if (shadowImage == null && shadowRectTransform != null)
+        {
+            shadowImage = shadowRectTransform.GetComponent<Image>();
+        }
+        if (handGraphicObject == null)
+        {
+            var hTrans = transform.Find("Hand_Graphic");
+            if (hTrans != null) handGraphicObject = hTrans.gameObject;
+        }
+        if (hitEffectObject == null)
+        {
+            var eTrans = transform.Find("Hit_Effect");
+            if (eTrans != null) hitEffectObject = eTrans.gameObject;
+        }
+
+        // 크기(SizeDelta) 보정 (화면에 뚜렷하게 보이도록 최소 450x600 보장)
+        Vector2 defaultHandSize = new Vector2(450f, 600f);
+        if (shadowRectTransform != null && shadowRectTransform.sizeDelta.x < 100f)
+        {
+            shadowRectTransform.sizeDelta = defaultHandSize;
+        }
+        if (handGraphicObject != null)
+        {
+            var hRect = handGraphicObject.GetComponent<RectTransform>();
+            if (hRect != null && hRect.sizeDelta.x < 100f) hRect.sizeDelta = defaultHandSize;
+        }
+        if (hitEffectObject != null)
+        {
+            var eRect = hitEffectObject.GetComponent<RectTransform>();
+            if (eRect != null && eRect.sizeDelta.x < 100f) eRect.sizeDelta = new Vector2(300f, 300f);
+        }
+
         // 초기 오브젝트 상태 정리
+        if (shadowRectTransform != null)
+        {
+            shadowRectTransform.gameObject.SetActive(true);
+            if (shadowImage != null)
+            {
+                Color c = shadowImage.color;
+                c.a = 0.35f;
+                shadowImage.color = c;
+            }
+        }
         if (handGraphicObject != null) handGraphicObject.SetActive(false);
         if (hitEffectObject != null) hitEffectObject.SetActive(false);
 
