@@ -7,6 +7,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 게임 종료 시(사망 또는 탈출 성공) 자연스럽게 페이드인되는 통합 결과창 UI 컨트롤러
+/// (사망 모드: GAME OVER / 승리 모드: GAME CLEAR 완벽 분기 지원)
 /// </summary>
 public class GameOverUIController : MonoBehaviour
 {
@@ -52,62 +53,32 @@ public class GameOverUIController : MonoBehaviour
             rt.localScale = Vector3.one;
         }
 
-        // [수정] 유니티 안전 검증 메서드로 CanvasGroup 확보
-        EnsureCanvasGroup();
-
-        canvasGroup.alpha = 0f;
-        canvasGroup.interactable = false;
-        canvasGroup.blocksRaycasts = false;
+        if (canvasGroup == null)
+        {
+            canvasGroup = GetComponent<CanvasGroup>() ?? gameObject.AddComponent<CanvasGroup>();
+        }
 
         BindComponents();
-
-        if (parentCanvas != null) parentCanvas.enabled = false;
-        gameObject.SetActive(false);
     }
 
     private void Start()
     {
-        EnsureCanvasGroup();
-        if (canvasGroup != null)
-        {
-            canvasGroup.alpha = 0f;
-            canvasGroup.interactable = false;
-            canvasGroup.blocksRaycasts = false;
-        }
-        if (parentCanvas != null) parentCanvas.enabled = false;
-        gameObject.SetActive(false);
+        if (Instance == null) Instance = this;
     }
 
     private void OnEnable()
     {
         MosquitoController.OnGameOver += ShowGameOverUI;
-        EscapeSystem.OnGameClear += ShowGameClearUI;
     }
 
     private void OnDisable()
     {
         MosquitoController.OnGameOver -= ShowGameOverUI;
-        EscapeSystem.OnGameClear -= ShowGameClearUI;
-    }
-
-    /// <summary>
-    /// [Best Practice] C# '??' 연산자의 유니티 널 검사 우회 버그를 방지하는 컴포넌트 보장 메서드
-    /// </summary>
-    private CanvasGroup EnsureCanvasGroup()
-    {
-        // 유니티의 '== null' 연산자 오버로딩을 명시적으로 사용
-        if (canvasGroup == null)
-        {
-            if (!TryGetComponent<CanvasGroup>(out canvasGroup))
-            {
-                canvasGroup = gameObject.AddComponent<CanvasGroup>();
-            }
-        }
-        return canvasGroup;
     }
 
     private void BindComponents()
     {
+        // 1. "점수위치" 자식 오브젝트들에서 실제 값 텍스트를 정밀 탐색
         var scoreValueContainer = FindChildRecursive(transform, "점수위치");
         if (scoreValueContainer != null)
         {
@@ -132,6 +103,7 @@ public class GameOverUIController : MonoBehaviour
             }
         }
 
+        // 예비 fallback 텍스트 바인딩
         if (survivalTimeText == null)
         {
             var t = FindChildRecursive(transform, "Time", "생존시간", "시간");
@@ -150,6 +122,7 @@ public class GameOverUIController : MonoBehaviour
             if (t != null) scoreText = t.GetComponent<TextMeshProUGUI>();
         }
 
+        // 제목 및 서브타이틀 텍스트 탐색
         if (titleText == null)
         {
             var t = FindChildRecursive(transform, "Title", "GameOverText", "제목", "Text (TMP)");
@@ -161,6 +134,7 @@ public class GameOverUIController : MonoBehaviour
             if (t != null) subTitleText = t.GetComponent<TextMeshProUGUI>();
         }
 
+        // 버튼 바인딩
         if (restartButton == null)
         {
             var t = FindChildRecursive(transform, "restart", "재시작", "retry");
@@ -213,13 +187,25 @@ public class GameOverUIController : MonoBehaviour
         return null;
     }
 
+    /// <summary>
+    /// 모기 사망 시 게임오버 화면 출력
+    /// </summary>
     public void ShowGameOverUI()
     {
         OpenResultPanel(isClear: false);
     }
 
+    /// <summary>
+    /// 모기 탈출 성공 시 게임 클리어(승리) 화면 출력
+    /// </summary>
     public void ShowGameClearUI()
     {
+        if (GameClearUIController.Instance != null)
+        {
+            GameClearUIController.Instance.ShowGameClearUI();
+            return;
+        }
+
         AudioManager.Instance?.PlaySFX(AudioManager.SFXType.Victory);
         OpenResultPanel(isClear: true);
     }
@@ -238,6 +224,7 @@ public class GameOverUIController : MonoBehaviour
         BindComponents();
         UpdateStats();
 
+        // 승리 vs 사망 텍스트 분기
         if (isClear)
         {
             if (titleText != null) titleText.text = "GAME CLEAR!";
@@ -263,24 +250,35 @@ public class GameOverUIController : MonoBehaviour
         int seconds = Mathf.FloorToInt(survivalSec % 60f);
         string timeStr = $"{minutes:00}:{seconds:00}";
 
-        if (survivalTimeText != null) survivalTimeText.text = timeStr;
+        if (survivalTimeText != null)
+        {
+            survivalTimeText.text = timeStr;
+        }
 
         float suckedBlood = BloodManager.Instance != null ? BloodManager.Instance.TotalSuckedBlood : 0f;
         int suckedInt = Mathf.RoundToInt(suckedBlood);
         string bloodStr = $"{suckedInt} ml";
 
-        if (suckedBloodText != null) suckedBloodText.text = bloodStr;
+        if (suckedBloodText != null)
+        {
+            suckedBloodText.text = bloodStr;
+        }
 
         int totalScore = (Mathf.FloorToInt(survivalSec) * 10) + (suckedInt * 20);
-        if (scoreText != null) scoreText.text = $"{totalScore:N0} 점";
+        if (scoreText != null)
+        {
+            scoreText.text = $"{totalScore:N0} 점";
+        }
 
         Debug.LogWarning($"<color=yellow>[GameOverUIController] 결과창 통계 갱신 -> 시간: {timeStr}, 흡혈량: {bloodStr}, 점수: {totalScore}</color>");
     }
 
     private IEnumerator FadeInRoutine()
     {
-        // [수정] 코루틴 내부에서도 안전하게 CanvasGroup 확보
-        EnsureCanvasGroup();
+        if (canvasGroup == null)
+        {
+            canvasGroup = GetComponent<CanvasGroup>() ?? gameObject.AddComponent<CanvasGroup>();
+        }
 
         canvasGroup.alpha = 0f;
         canvasGroup.interactable = false;

@@ -134,6 +134,7 @@ public class MosquitoController : MonoBehaviour
         }
 
         BloodManager.OnBloodDepleted += DieFromStarvation;
+        EscapeSystem.OnGameClear += OnGameClear;
     }
 
     private void OnDisable()
@@ -149,6 +150,14 @@ public class MosquitoController : MonoBehaviour
         }
 
         BloodManager.OnBloodDepleted -= DieFromStarvation;
+        EscapeSystem.OnGameClear -= OnGameClear;
+        ResetTimeScale();
+    }
+
+    private void OnGameClear()
+    {
+        isDead = true;
+        if (rb != null) rb.linearVelocity = Vector2.zero;
         ResetTimeScale();
     }
 
