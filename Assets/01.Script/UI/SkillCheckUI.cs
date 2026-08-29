@@ -4,7 +4,8 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 무작위 속도 변동과 피드백 텀이 포함된 무한 순환형 QTE 스킬체크 시스템
+/// 무작위 속도 변동과 피드백 텀이 포함된 무한 순환형 QTE 스킬체크 시스템.
+/// 모기 사망 시 UI 잔상 방지를 위한 이벤트 기반 강제 중단 기능 포함.
 /// </summary>
 public class SkillCheckUI : MonoBehaviour
 {
@@ -45,6 +46,7 @@ public class SkillCheckUI : MonoBehaviour
     private float greatEndAngle;
 
     private Action<SkillCheckResult> onCompleteCallback;
+    private Coroutine feedbackCoroutine; // 피드백 대기 코루틴 추적용 변수
 
     public enum SkillCheckResult
     {
@@ -61,6 +63,18 @@ public class SkillCheckUI : MonoBehaviour
         if (uiContainer != null) uiContainer.SetActive(false);
     }
 
+    private void OnEnable()
+    {
+        // [핵심 저결합 설계] 모기 사망/게임오버 이벤트를 구독하여 활성화 상태 관리
+        MosquitoController.OnGameOver += ForceCancelSkillCheck;
+    }
+
+    private void OnDisable()
+    {
+        // 메모리 누수 방지를 위한 이벤트 구독 해제
+        MosquitoController.OnGameOver -= ForceCancelSkillCheck;
+    }
+
     /// <summary>
     /// 스킬체크 시퀀스 시작 (매번 무작위 속도 적용)
     /// </summary>
@@ -68,11 +82,17 @@ public class SkillCheckUI : MonoBehaviour
     /// <param name="onComplete">결과 콜백</param>
     public void BeginSkillCheck(float externalSpeedMultiplier, Action<SkillCheckResult> onComplete)
     {
+        // 만약 이전 피드백 코루틴이 돌고 있다면 안전하게 정지
+        if (feedbackCoroutine != null)
+        {
+            StopCoroutine(feedbackCoroutine);
+            feedbackCoroutine = null;
+        }
+
         onCompleteCallback = onComplete;
         isEvaluating = false;
 
-        // [핵심 추가] 최소~최대 범위 내에서 무작위 배율을 추출하여 매번 다이내믹한 속도 생성
-        // 수학적 공식: $\omega_{\text{final}} = \omega_{\text{base}} \cdot M_{\text{external}} \cdot \text{Random}(M_{\min}, M_{\max})$
+        // 최소~최대 범위 내에서 무작위 배율 추출
         float randomSpeedFactor = UnityEngine.Random.Range(minSpeedMultiplier, maxSpeedMultiplier);
         currentSpeed = baseRotationSpeed * externalSpeedMultiplier * randomSpeedFactor;
 
@@ -162,7 +182,8 @@ public class SkillCheckUI : MonoBehaviour
             result = SkillCheckResult.Fail;
         }
 
-        StartCoroutine(ProcessFeedbackRoutine(result));
+        // 피드백 대기 코루틴 참조 보존
+        feedbackCoroutine = StartCoroutine(ProcessFeedbackRoutine(result));
     }
 
     private IEnumerator ProcessFeedbackRoutine(SkillCheckResult result)
@@ -171,6 +192,35 @@ public class SkillCheckUI : MonoBehaviour
 
         if (uiContainer != null) uiContainer.SetActive(false);
 
+        feedbackCoroutine = null;
         onCompleteCallback?.Invoke(result);
+    }
+
+    /// <summary>
+    /// [핵심 버그 수정 메서드] 모기 사망(게임오버) 시 스킬체크를 즉시 강제 중단하고 잔상을 지웁니다.
+    /// </summary>
+    public void ForceCancelSkillCheck()
+    {
+        Debug.Log("<color=orange>[SkillCheckUI] 게임오버 신호 감지: 스킬체크 강제 중단 및 UI 비활성화</color>");
+
+        // 1. 플래그 즉시 차단
+        isActive = false;
+        isEvaluating = false;
+
+        // 2. 진행 중인 피드백 대기 텀 코루틴이 있다면 강제 정지
+        if (feedbackCoroutine != null)
+        {
+            StopCoroutine(feedbackCoroutine);
+            feedbackCoroutine = null;
+        }
+
+        // 3. UI 컨테이너 즉시 숨김 처리 (잔상 방지)
+        if (uiContainer != null)
+        {
+            uiContainer.SetActive(false);
+        }
+
+        // 4. 꼬인 콜백 참조 해제
+        onCompleteCallback = null;
     }
 }

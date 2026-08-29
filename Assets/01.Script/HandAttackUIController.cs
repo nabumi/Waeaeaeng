@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 손바닥 마스크 내부에서 장심(중앙)부터 피가 차오르는 연출과
-/// 모기를 쫓아가지 않고 지정된 월드 좌표에 UI를 고정하는 완전체 UI 제어 클래스.
+/// 랜덤 회전(Z축) 및 월드 좌표 UI 고정을 처리하는 완결판 UI 제어 클래스.
 /// </summary>
 public class HandAttackUIController : MonoBehaviour
 {
@@ -27,7 +27,7 @@ public class HandAttackUIController : MonoBehaviour
     [Tooltip("외곽선 점멸 주파수(속도)")]
     [SerializeField] private float flashFrequency = 45f;
 
-    // 위치 고정용 내부 변수
+    // 위치 및 회전 고정용 내부 변수
     private Vector2 targetWorldPosition;
     private Canvas parentCanvas;
     private Camera mainCamera;
@@ -35,13 +35,20 @@ public class HandAttackUIController : MonoBehaviour
     private Coroutine chargeCoroutine;
 
     /// <summary>
-    /// UI 생성 직후 HumanAngerManager에 의해 호출되어 고정 월드 좌표 및 캔버스를 설정합니다.
+    /// UI 생성 직후 HumanAngerManager에 의해 호출되어 고정 월드 좌표, 캔버스, 랜덤 회전각을 설정합니다.
     /// </summary>
-    public void Initialize(Vector2 worldPos, Canvas canvas)
+    public void Initialize(Vector2 worldPos, Canvas canvas, float zRotationAngle = 0f)
     {
         this.targetWorldPosition = worldPos;
         this.parentCanvas = canvas;
         this.mainCamera = Camera.main != null ? Camera.main : FindAnyObjectByType<Camera>();
+
+        // [핵심] Z축 랜덤 회전 적용 (Quaternion 변환)
+        RectTransform rectTransform = GetComponent<RectTransform>();
+        if (rectTransform != null)
+        {
+            rectTransform.localRotation = Quaternion.Euler(0f, 0f, zRotationAngle);
+        }
 
         // 생성 직후 좌표 맞춤
         UpdateUIPosition();
@@ -159,7 +166,7 @@ public class HandAttackUIController : MonoBehaviour
     [ContextMenu("Test Charge Animation (1.5s)")]
     private void TestChargeInEditor()
     {
-        StartHandCharge(1.5f, () => Debug.Log("<color=red>[ECHO TD Test] 손바닥 차오름 완료! 찰싹!</color>"));
+        StartHandCharge(1.5f, () => Debug.Log("<color=red> 손바닥 차오름 완료! 찰싹!</color>"));
     }
 
     #endregion

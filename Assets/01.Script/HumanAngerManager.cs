@@ -2,7 +2,8 @@ using System.Collections;
 using UnityEngine;
 
 /// <summary>
-/// 인간의 분노 스택에 따라 공격 전조 시간을 5초부터 점진적으로 단축시키는 관리 매니저 클래스.
+/// 인간의 분노 스택에 따라 공격 전조 시간을 5초부터 점진적으로 단축시키고,
+/// 손바닥 공격의 랜덤 회전 각도를 부여하는 관리 매니저 클래스.
 /// </summary>
 public class HumanAngerManager : MonoBehaviour
 {
@@ -11,6 +12,13 @@ public class HumanAngerManager : MonoBehaviour
     [Header("UI 에셋 및 캔버스 바인딩")]
     [SerializeField] private Canvas targetCanvas;
     [SerializeField] private GameObject handAttackUIPrefab;
+
+    [Header("손바닥 회전 연출 설정")]
+    [Tooltip("손바닥 UI가 회전할 최소 Z 각도 (예: -60도)")]
+    [SerializeField] private float minRotationAngle = -60f;
+
+    [Tooltip("손바닥 UI가 회전할 최대 Z 각도 (예: 60도)")]
+    [SerializeField] private float maxRotationAngle = 60f;
 
     [Header("공격 속도 밸런싱 (Time Settings)")]
     [Tooltip("기본 분노 0일 때 공격 차오름 시간 (기본 5초)")]
@@ -90,7 +98,7 @@ public class HumanAngerManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 손바닥 공격 진행 코루틴 (고정 좌표 생성 및 연출 대기 후 데미지 처리)
+    /// 손바닥 공격 진행 코루틴 (고정 좌표 및 랜덤 회전 생성 후 연출 대기 및 데미지 처리)
     /// </summary>
     private IEnumerator HandAttackRoutine(Vector2 targetWorldPosition)
     {
@@ -111,11 +119,14 @@ public class HumanAngerManager : MonoBehaviour
         // 1. UI Prefab 생성
         GameObject handInstance = Instantiate(handAttackUIPrefab, targetCanvas.transform);
 
-        // 2. UI 제어기를 통한 위치 고정 초기화 및 연출 대기
+        // 2. [핵심] Z축 랜덤 회전 각도 연산 ($\theta_{\text{rand}} \in [\theta_{\min}, \theta_{\max}]$)
+        float randomAngle = Random.Range(minRotationAngle, maxRotationAngle);
+
+        // 3. UI 제어기를 통한 위치 고정, 회전 및 연출 시작
         if (handInstance.TryGetComponent<HandAttackUIController>(out var uiController))
         {
-            // [핵심] 생성된 UI에 고정시킬 월드 좌표(targetWorldPosition)와 Canvas 전달!
-            uiController.Initialize(targetWorldPosition, targetCanvas);
+            // [핵심] 고정 월드 좌표, Canvas, 그리고 랜덤 Z 회전각 전달!
+            uiController.Initialize(targetWorldPosition, targetCanvas, randomAngle);
 
             bool isAnimationFinished = false;
             uiController.StartHandCharge(currentFillDuration, () =>
@@ -132,16 +143,16 @@ public class HumanAngerManager : MonoBehaviour
             yield return new WaitForSeconds(currentFillDuration);
         }
 
-        // 3. 고정된 좌표 지점에 판정 실행
+        // 4. 고정된 좌표 지점에 판정 실행
         ExecuteAttackDamage(targetWorldPosition);
 
-        // 4. UI 제거 및 공격 상태 해제
+        // 5. UI 제거 및 공격 상태 해제
         Destroy(handInstance);
         isAttacking = false;
     }
 
     /// <summary>
-    /// 지정된 월드 좌표 범위 내에 모기가 있는지 판정하여 데미지를 입힙니다.
+    /// 지정된 월드 좌표 범위 내에 모기가 있는지 판정하여 데미지를 입깁니다.
     /// </summary>
     private void ExecuteAttackDamage(Vector2 targetWorldPosition)
     {
