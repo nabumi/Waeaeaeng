@@ -1,54 +1,59 @@
 using System.Collections;
 using UnityEngine;
-using UnityEngine.UI;
 
 /// <summary>
-/// 손바닥 UI 연출 및 좌표 변환 시 발생할 수 있는 NullReference를 100% 차단한 매니저
+/// 인간의 분노 스택에 따라 공격 전조 시간을 5초부터 점진적으로 단축시키는 관리 매니저 클래스.
 /// </summary>
 public class HumanAngerManager : MonoBehaviour
 {
     public static HumanAngerManager Instance { get; private set; }
 
     [Header("UI 에셋 및 캔버스 바인딩")]
-    [SerializeField] private Canvas targetCanvas;           // 사용 중인 UI Canvas 참조
-    [SerializeField] private GameObject handAttackUIPrefab; // 손바닥 UI 프리팹
+    [SerializeField] private Canvas targetCanvas;
+    [SerializeField] private GameObject handAttackUIPrefab;
 
-    [Header("공격 속도 및 판정 범위")]
-    [SerializeField] private float baseFillDuration = 1.2f;
-    [SerializeField] private float minFillDuration = 0.35f;
+    [Header("공격 속도 밸런싱 (Time Settings)")]
+    [Tooltip("기본 분노 0일 때 공격 차오름 시간 (기본 5초)")]
+    [SerializeField] private float baseFillDuration = 5.0f;
+
+    [Tooltip("분노가 극에 달했을 때의 최소 공격 전조 시간 (유저 최후의 반응 속도)")]
+    [SerializeField] private float minFillDuration = 0.5f;
+
+    [Tooltip("손바닥 피격 판정 범위 반지름")]
     [SerializeField] private float attackRadius = 1.2f;
+
     [SerializeField] private LayerMask mosquitoLayer;
 
-    [Header("인간 분노(Anger) 설정")]
+    [Header("인간 분노(Anger) 가속 설정")]
+    [Tooltip("1회 회피할 때마다 추가되는 분노 계수 (0.25 = 회피할 때마다 25%씩 가속)")]
     [SerializeField] private float angerPerDodge = 0.25f;
 
     private int dodgeCount = 0;
-    private float currentAngerMultiplier = 1f;
-    private bool isAttacking = false;
+    private float currentAngerMultiplier = 1.0f;
 
-    // 카메라 캐싱 변수
+    /// <summary>
+    /// 현재 인간의 분노 배율 (기본 1.0 ~ 회피 시 증가)
+    /// </summary>
+    public float CurrentAngerMultiplier => currentAngerMultiplier;
+
+    private bool isAttacking = false;
     private Camera cachedMainCamera;
 
-    // [핵심] 널 체크를 보장하는 프라퍼티 (Lazy Property)
     private Camera MainCamera
     {
         get
         {
             if (cachedMainCamera == null)
             {
-                cachedMainCamera = Camera.main; // 1순위: Tag가 MainCamera인 카메라
-
+                cachedMainCamera = Camera.main;
                 if (cachedMainCamera == null)
                 {
-                    // 2순위: 씬 내의 아무 카메라나 탐색 (최신 API)
                     cachedMainCamera = Object.FindAnyObjectByType<Camera>();
                 }
             }
             return cachedMainCamera;
         }
     }
-
-    public float CurrentAngerMultiplier => currentAngerMultiplier;
 
     private void Awake()
     {
@@ -62,18 +67,19 @@ public class HumanAngerManager : MonoBehaviour
             return;
         }
 
-        // Canvas 자동 탐색 (최신 유니티 6/2023+ API)
         if (targetCanvas == null)
         {
             targetCanvas = Object.FindAnyObjectByType<Canvas>();
         }
     }
 
+    /// <summary>
+    /// 공격을 트리거합니다. 분노 수치에 따라 5초에서 점점 줄어드는 시간을 계산합니다.
+    /// </summary>
     public void TriggerAttack(Vector2 targetWorldPosition)
     {
         if (isAttacking) return;
 
-        // [방어 코드 1] 손바닥 UI 프리팹 할당 검증
         if (handAttackUIPrefab == null)
         {
             Debug.LogError("<color=red>[HumanAngerManager] handAttackUIPrefab이 인스펙터에 할당되지 않았습니다!</color>");
@@ -83,13 +89,18 @@ public class HumanAngerManager : MonoBehaviour
         StartCoroutine(HandAttackRoutine(targetWorldPosition));
     }
 
+    /// <summary>
+    /// 손바닥 공격 진행 코루틴 (고정 좌표 생성 및 연출 대기 후 데미지 처리)
+    /// </summary>
     private IEnumerator HandAttackRoutine(Vector2 targetWorldPosition)
     {
         isAttacking = true;
 
-        float fillDuration = Mathf.Max(minFillDuration, baseFillDuration / currentAngerMultiplier);
+        // T_fill = Max(T_min, T_base / AngerMultiplier)
+        float currentFillDuration = Mathf.Max(minFillDuration, baseFillDuration / currentAngerMultiplier);
 
-        // [방어 코드 2] targetCanvas 검증
+        Debug.Log($"<color=cyan>[공격 시작] 현재 분노 배율: {currentAngerMultiplier:F2}x | 경고 시간: {currentFillDuration:F2}초</color>");
+
         if (targetCanvas == null)
         {
             Debug.LogError("<color=red>[HumanAngerManager] targetCanvas를 찾을 수 없습니다!</color>");
@@ -97,96 +108,54 @@ public class HumanAngerManager : MonoBehaviour
             yield break;
         }
 
-        // 1. UI 프리팹 생성
+        // 1. UI Prefab 생성
         GameObject handInstance = Instantiate(handAttackUIPrefab, targetCanvas.transform);
-        RectTransform handRectTransform = handInstance.GetComponent<RectTransform>();
 
-        // [방어 코드 3] RectTransform 유효성 확인
-        if (handRectTransform == null)
+        // 2. UI 제어기를 통한 위치 고정 초기화 및 연출 대기
+        if (handInstance.TryGetComponent<HandAttackUIController>(out var uiController))
         {
-            Debug.LogError("<color=red>[HumanAngerManager] UI 프리팹에 RectTransform 컴포넌트가 없습니다!</color>");
-            Destroy(handInstance);
-            isAttacking = false;
-            yield break;
-        }
+            // [핵심] 생성된 UI에 고정시킬 월드 좌표(targetWorldPosition)와 Canvas 전달!
+            uiController.Initialize(targetWorldPosition, targetCanvas);
 
-        // 2. 렌더 모드별 예외 처리된 안전한 좌표 변환 실행
-        SetUIPositionByCanvasMode(handRectTransform, targetWorldPosition);
-
-        Image fillImage = handInstance.GetComponentInChildren<Image>();
-        if (fillImage != null)
-        {
-            fillImage.type = Image.Type.Filled;
-            fillImage.fillAmount = 0f;
-            fillImage.color = Color.red;
-        }
-
-        // 3. Red Fill 차오름 연출
-        float timer = 0f;
-        while (timer < fillDuration)
-        {
-            timer += Time.deltaTime;
-
-            if (fillImage != null)
+            bool isAnimationFinished = false;
+            uiController.StartHandCharge(currentFillDuration, () =>
             {
-                fillImage.fillAmount = Mathf.Clamp01(timer / fillDuration);
-            }
-            yield return null;
-        }
+                isAnimationFinished = true;
+            });
 
-        // 4. 타격 판정 연산
-        Collider2D hitMosquito = Physics2D.OverlapCircle(targetWorldPosition, attackRadius, mosquitoLayer);
-
-        if (hitMosquito != null && hitMosquito.TryGetComponent<MosquitoController>(out var mosquito))
-        {
-            Debug.LogError("<color=red>[찰싹!] 손바닥 타격 성공!</color>");
-            mosquito.OnHitByHumanHand();
+            // 연출이 완료될 때까지 대기
+            yield return new WaitUntil(() => isAnimationFinished);
         }
         else
         {
-            OnAttackDodged();
+            // Fallback: HandAttackUIController가 없을 경우 단순 대기
+            yield return new WaitForSeconds(currentFillDuration);
         }
 
+        // 3. 고정된 좌표 지점에 판정 실행
+        ExecuteAttackDamage(targetWorldPosition);
+
+        // 4. UI 제거 및 공격 상태 해제
         Destroy(handInstance);
         isAttacking = false;
     }
 
     /// <summary>
-    /// 모든 Null 예외를 방어하도록 보완된 좌표계 변환 함수 (기존 137번째 줄 버그 수정)
+    /// 지정된 월드 좌표 범위 내에 모기가 있는지 판정하여 데미지를 입힙니다.
     /// </summary>
-    private void SetUIPositionByCanvasMode(RectTransform uiRect, Vector2 worldPos)
+    private void ExecuteAttackDamage(Vector2 targetWorldPosition)
     {
-        if (uiRect == null || targetCanvas == null) return;
+        Collider2D hitMosquito = Physics2D.OverlapCircle(targetWorldPosition, attackRadius, mosquitoLayer);
 
-        // [핵심 방어] 안전한 카메라 호출
-        Camera cam = MainCamera;
-        if (cam == null)
+        if (hitMosquito != null && hitMosquito.TryGetComponent<MosquitoController>(out var mosquito))
         {
-            Debug.LogError("<color=red>[HumanAngerManager] 씬에 활성화된 카메라가 없어 UI 위치를 맞출 수 없습니다!</color>");
-            return;
+            Debug.LogError("<color=red>[찰싹!] 손바닥 타격 성공! (모기 잡힘)</color>");
+            mosquito.OnHitByHumanHand();
+            ResetAnger();
         }
-
-        if (targetCanvas.renderMode == RenderMode.ScreenSpaceOverlay)
+        else
         {
-            // $\vec{P}_{\text{screen}} = \text{WorldToScreenPoint}(\vec{P}_{\text{world}})$
-            Vector3 screenPoint = cam.WorldToScreenPoint(worldPos);
-            uiRect.position = screenPoint;
-        }
-        else if (targetCanvas.renderMode == RenderMode.ScreenSpaceCamera)
-        {
-            Camera renderCam = targetCanvas.worldCamera != null ? targetCanvas.worldCamera : cam;
-
-            RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                targetCanvas.transform as RectTransform,
-                cam.WorldToScreenPoint(worldPos),
-                renderCam,
-                out Vector2 localPoint
-            );
-            uiRect.anchoredPosition = localPoint;
-        }
-        else // RenderMode.WorldSpace
-        {
-            uiRect.position = worldPos;
+            OnAttackDodged();
         }
     }
 
@@ -194,7 +163,16 @@ public class HumanAngerManager : MonoBehaviour
     {
         dodgeCount++;
         currentAngerMultiplier = 1.0f + (dodgeCount * angerPerDodge);
-        Debug.Log($"<color=yellow>[회피!] 사람이 더 화났습니다! 배율: {currentAngerMultiplier:F2}x</color>");
+
+        float nextDuration = Mathf.Max(minFillDuration, baseFillDuration / currentAngerMultiplier);
+        Debug.Log($"<color=yellow>[회피 성공!] 모기가 피했습니다! 분노 스택: {dodgeCount} | 다음 공격 시간: {nextDuration:F2}초</color>");
+    }
+
+    public void ResetAnger()
+    {
+        dodgeCount = 0;
+        currentAngerMultiplier = 1.0f;
+        Debug.Log("<color=green>[분노 초기화] 사람이 상쾌해졌습니다. 공격 시간이 5초로 리셋됩니다.</color>");
     }
 
     private void OnDrawGizmosSelected()
