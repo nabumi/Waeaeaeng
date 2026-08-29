@@ -40,7 +40,7 @@ public class GameClearUIController : MonoBehaviour
         if (Instance == null) Instance = this;
         else if (Instance != this)
         {
-            Destroy(gameObject);
+            Destroy(this);
             return;
         }
 
@@ -112,6 +112,11 @@ public class GameClearUIController : MonoBehaviour
     private void OnDisable()
     {
         EscapeSystem.OnGameClear -= ShowGameClearUI;
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
     }
 
 #if UNITY_EDITOR
@@ -425,6 +430,17 @@ public class GameClearUIController : MonoBehaviour
             canvasGroup.blocksRaycasts = true;
         }
         Debug.Log("<color=green>[GameClearUIController] 클리어 화면 페이드인 완료</color>");
+    }
+
+    private void Update()
+    {
+        if (gameObject.activeInHierarchy)
+        {
+            if (Keyboard.current != null && (Keyboard.current.rKey.wasPressedThisFrame || Keyboard.current.spaceKey.wasPressedThisFrame || Keyboard.current.enterKey.wasPressedThisFrame))
+            {
+                OnRestartClicked();
+            }
+        }
     }
 
     public void OnRestartClicked()

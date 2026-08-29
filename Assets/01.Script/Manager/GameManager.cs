@@ -26,13 +26,18 @@ public class GameManager : MonoBehaviour
         {
             Instance = this;
         }
-        else
+        else if (Instance != this)
         {
-            Destroy(gameObject);
+            Destroy(this);
             return;
         }
 
         EnsureUIControllers();
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
     }
 
     private void Start()

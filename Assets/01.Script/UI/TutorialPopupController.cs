@@ -34,7 +34,7 @@ public class TutorialPopupController : MonoBehaviour
         if (Instance == null) Instance = this;
         else if (Instance != this)
         {
-            Destroy(gameObject);
+            Destroy(this);
             return;
         }
 
@@ -99,6 +99,11 @@ public class TutorialPopupController : MonoBehaviour
         }
         isPopupOpen = false;
         gameObject.SetActive(false);
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
     }
 
     private void Update()

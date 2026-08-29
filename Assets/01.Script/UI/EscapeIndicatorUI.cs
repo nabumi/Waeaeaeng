@@ -62,7 +62,7 @@ public class EscapeIndicatorUI : MonoBehaviour
         if (instance == null) instance = this;
         else if (instance != this)
         {
-            Destroy(gameObject);
+            Destroy(this);
             return;
         }
 
@@ -137,6 +137,11 @@ public class EscapeIndicatorUI : MonoBehaviour
         isTracking = false;
         if (topBannerRect != null) topBannerRect.gameObject.SetActive(false);
         gameObject.SetActive(false);
+    }
+
+    private void OnDestroy()
+    {
+        if (instance == this) instance = null;
     }
 
     private void UpdateArrowPositionAndRotation()

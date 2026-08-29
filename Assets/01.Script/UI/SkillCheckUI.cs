@@ -58,9 +58,18 @@ public class SkillCheckUI : MonoBehaviour
     private void Awake()
     {
         if (Instance == null) Instance = this;
-        else Destroy(gameObject);
+        else if (Instance != this)
+        {
+            Destroy(this);
+            return;
+        }
 
         if (uiContainer != null) uiContainer.SetActive(false);
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
     }
 
     private void OnEnable()

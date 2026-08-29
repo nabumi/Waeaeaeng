@@ -81,7 +81,7 @@ public class EscapeSystem : MonoBehaviour
         if (instance == null) instance = this;
         else if (instance != this)
         {
-            Destroy(gameObject);
+            Destroy(this);
             return;
         }
 

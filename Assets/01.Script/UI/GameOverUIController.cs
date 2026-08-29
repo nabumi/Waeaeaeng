@@ -38,7 +38,7 @@ public class GameOverUIController : MonoBehaviour
         if (Instance == null) Instance = this;
         else if (Instance != this)
         {
-            Destroy(gameObject);
+            Destroy(this);
             return;
         }
 
@@ -108,6 +108,11 @@ public class GameOverUIController : MonoBehaviour
     private void OnDisable()
     {
         MosquitoController.OnGameOver -= ShowGameOverUI;
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
     }
 
     public void BindComponents()
@@ -385,6 +390,17 @@ public class GameOverUIController : MonoBehaviour
             canvasGroup.blocksRaycasts = true;
         }
         Debug.Log("<color=green>[GameOverUIController] 결과창 페이드인 완료</color>");
+    }
+
+    private void Update()
+    {
+        if (gameObject.activeInHierarchy)
+        {
+            if (Keyboard.current != null && (Keyboard.current.rKey.wasPressedThisFrame || Keyboard.current.spaceKey.wasPressedThisFrame || Keyboard.current.enterKey.wasPressedThisFrame))
+            {
+                OnRestartClicked();
+            }
+        }
     }
 
     public void OnRestartClicked()

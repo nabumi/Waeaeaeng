@@ -86,11 +86,16 @@ public class IngameHUDController : MonoBehaviour
         if (Instance == null) Instance = this;
         else if (Instance != this)
         {
-            Destroy(gameObject);
+            Destroy(this);
             return;
         }
 
         BindComponents();
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
     }
 
     private void Start()

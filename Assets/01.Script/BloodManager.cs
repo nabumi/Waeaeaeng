@@ -69,7 +69,7 @@ public class BloodManager : MonoBehaviour
         }
         else if (instance != this)
         {
-            Destroy(gameObject);
+            Destroy(this);
             return;
         }
 

@@ -53,7 +53,7 @@ public class MosquitoController : MonoBehaviour
 
     [Header("피부 안착 및 위험도 설정")]
     [SerializeField] private LayerMask humanSkinLayer;
-    [SerializeField] private float landingRadius = 0.8f;
+    [SerializeField] private float landingRadius = 1.5f;
     [SerializeField] private float checkInterval = 1.0f;
     private float attackCheckTimer = 0f;
     private float currentZoneDangerRatio = 0f;
@@ -85,6 +85,7 @@ public class MosquitoController : MonoBehaviour
     [SerializeField] private Sprite deathSprite;
     private Vector2 moveInput;
 
+    private InputAction landAction;
     private InputAction checkAction;
     private InputAction suckAction;
     private InputAction takeOffAction;
@@ -111,6 +112,7 @@ public class MosquitoController : MonoBehaviour
 
         if (playerInput != null && playerInput.actions != null)
         {
+            landAction = playerInput.actions.FindAction("Land");
             checkAction = playerInput.actions.FindAction("Check");
             suckAction = playerInput.actions.FindAction("Suck");
             takeOffAction = playerInput.actions.FindAction("TakeOff");
@@ -124,6 +126,7 @@ public class MosquitoController : MonoBehaviour
 
     private void OnEnable()
     {
+        if (landAction != null) landAction.performed += OnLandInputReceived;
         if (checkAction != null) checkAction.performed += OnCheckInputReceived;
         if (takeOffAction != null) takeOffAction.performed += OnTakeOffInputReceived;
         if (dashAction != null) dashAction.performed += OnDashInputReceived;
@@ -140,6 +143,7 @@ public class MosquitoController : MonoBehaviour
 
     private void OnDisable()
     {
+        if (landAction != null) landAction.performed -= OnLandInputReceived;
         if (checkAction != null) checkAction.performed -= OnCheckInputReceived;
         if (takeOffAction != null) takeOffAction.performed -= OnTakeOffInputReceived;
         if (dashAction != null) dashAction.performed -= OnDashInputReceived;
@@ -240,7 +244,19 @@ public class MosquitoController : MonoBehaviour
         {
             DrainFlightBlood();
             HandleKeyboardDashCheck();
+            if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
+            {
+                TryLand();
+            }
             EvaluateFlyingDanger();
+        }
+        else if (currentState == MosquitoState.Checking)
+        {
+            if ((Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame) ||
+                (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame))
+            {
+                SkillCheckUI.Instance?.OnInputPressed();
+            }
         }
         else if (currentState == MosquitoState.Sucking)
         {
@@ -255,13 +271,6 @@ public class MosquitoController : MonoBehaviour
 
             ProcessBloodSucking();
             EvaluateSuckingDanger();
-        }
-        else if (currentState == MosquitoState.Checking)
-        {
-            if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
-            {
-                SkillCheckUI.Instance?.OnInputPressed();
-            }
         }
     }
 
@@ -547,6 +556,7 @@ public class MosquitoController : MonoBehaviour
         isDead = true;
         currentState = MosquitoState.Dead;
 
+        SkillCheckUI.Instance?.ForceCancelSkillCheck();
         AudioManager.Instance?.StopMosquitoBuzz();
         AudioManager.Instance?.PlaySFX(AudioManager.SFXType.GameOver);
 
@@ -627,14 +637,50 @@ public class MosquitoController : MonoBehaviour
         moveInput = context.ReadValue<Vector2>();
     }
 
+    private void OnLandInputReceived(InputAction.CallbackContext context)
+    {
+        if (context.performed)
+        {
+            TryLand();
+        }
+    }
+
     public void OnLand(InputAction.CallbackContext context)
     {
-        if (isDead || !context.performed || currentState != MosquitoState.Flying) return;
+        if (context.performed)
+        {
+            TryLand();
+        }
+    }
 
+    /// <summary>
+    /// 플레이어 전방/반경 1.5m 이내 피부(Layer 3) 표면을 감지하여 안착 시퀀스 시작
+    /// </summary>
+    public bool TryLand()
+    {
+        if (isDead || currentState != MosquitoState.Flying) return false;
+
+        // 1. 사람 피부 레이어(Layer 3) 또는 접촉 콜라이더 탐색
         Collider2D hit = Physics2D.OverlapCircle(transform.position, landingRadius, humanSkinLayer);
-        if (hit == null) return;
+        if (hit == null)
+        {
+            // LayerMask 인스펙터 불일치 대비: 전체 반경 콜라이더 탐색 폴백
+            var allHits = Physics2D.OverlapCircleAll(transform.position, landingRadius);
+            foreach (var col in allHits)
+            {
+                if (col.gameObject.layer == 3 || col.name.Contains("Zone_") || col.name.Contains("Enemy_") || col.GetComponent<IBodyPartZone>() != null)
+                {
+                    hit = col;
+                    break;
+                }
+            }
+        }
+
+        if (hit == null) return false;
 
         Vector3 landingPoint = hit.ClosestPoint(transform.position);
+
+        // 2. BitingZone 탐색 및 부착
         BitingZone bZone = hit.GetComponent<BitingZone>();
         if (bZone == null) bZone = hit.GetComponentInParent<BitingZone>();
 
@@ -649,18 +695,36 @@ public class MosquitoController : MonoBehaviour
                 bZone.CurrentZoneType = GlobalEnums.ZoneType.Green;
         }
 
-        if (bZone.IsPositionAlreadyBitten(landingPoint)) return;
+        if (bZone.IsPositionAlreadyBitten(landingPoint))
+        {
+            Debug.Log("<color=yellow>[MosquitoController] 이미 물린 자국 근처에는 다시 앉을 수 없습니다.</color>");
+            return false;
+        }
 
         currentBitingZone = bZone;
         currentZoneMaxSuckAmount = bZone.GetMaxSuckAmount();
 
+        // 3. 위험도 비율 계산 (기본값 안전 보장)
         IBodyPartZone zone = hit.GetComponent<IBodyPartZone>();
         if (zone == null) zone = hit.GetComponentInParent<IBodyPartZone>();
+
         if (zone != null)
         {
             currentZoneDangerRatio = zone.DangerProbability;
-            StartLandingSequence(hit, currentZoneDangerRatio);
         }
+        else
+        {
+            if (hit.name.Contains("Head") || (hit.transform.parent != null && hit.transform.parent.name.Contains("Head")))
+                currentZoneDangerRatio = 0.8f;
+            else if (hit.name.Contains("Upper") || (hit.transform.parent != null && hit.transform.parent.name.Contains("Upper")))
+                currentZoneDangerRatio = 0.5f;
+            else
+                currentZoneDangerRatio = 0.2f;
+        }
+
+        // 4. 안착 시퀀스 시작 (무조건 실행)
+        StartLandingSequence(hit, currentZoneDangerRatio);
+        return true;
     }
 
     private void StartLandingSequence(Collider2D skin, float dangerRatio)

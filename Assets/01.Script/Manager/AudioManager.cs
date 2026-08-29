@@ -111,6 +111,11 @@ public class AudioManager : MonoBehaviour
         SceneManager.sceneLoaded -= OnSceneLoaded;
     }
 
+    private void OnDestroy()
+    {
+        if (instance == this) instance = null;
+    }
+
     private void Start()
     {
         CheckAndPlaySceneBGM(SceneManager.GetActiveScene().name);
