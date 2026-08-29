@@ -355,6 +355,12 @@ public class MosquitoController : MonoBehaviour
 
     #region 대시(Dash) 및 불릿 타임
 
+    public void OnDash(InputAction.CallbackContext context)
+    {
+        if (!context.performed) return;
+        PerformDash();
+    }
+
     private void OnDashInputReceived(InputAction.CallbackContext context)
     {
         if (!context.performed) return;
@@ -402,16 +408,32 @@ public class MosquitoController : MonoBehaviour
     private IEnumerator DashRoutine()
     {
         isDashing = true;
-        Time.timeScale = slowTimeScale;
+
+        // 인스펙터 값이 1 이상이거나 비정상일 경우 안전하게 0.2f (5배 슬로우) 적용
+        float effectiveSlow = (slowTimeScale > 0.01f && slowTimeScale < 0.95f) ? slowTimeScale : 0.2f;
+        Time.timeScale = effectiveSlow;
         Time.fixedDeltaTime = 0.02f * Time.timeScale;
+
+        if (spriteRenderer != null)
+        {
+            spriteRenderer.color = new Color(1f, 1f, 0.4f, 1f); // 대시 중 황금빛 잔상 플래시
+        }
 
         AudioManager.Instance?.PlaySFX(AudioManager.SFXType.Dash);
         UpdateAnimationState();
+
+        Debug.Log($"<color=yellow>[MosquitoController] ⚡ 불릿타임 대시 발동! (슬로우모션 Time.timeScale = {Time.timeScale:F2}, 지속시간 = {dashDuration}s)</color>");
 
         yield return new WaitForSecondsRealtime(dashDuration);
 
         isDashing = false;
         ResetTimeScale();
+
+        if (spriteRenderer != null)
+        {
+            spriteRenderer.color = Color.white;
+        }
+
         UpdateAnimationState();
     }
 
