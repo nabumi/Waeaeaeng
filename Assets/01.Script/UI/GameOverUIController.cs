@@ -32,7 +32,18 @@ public class GameOverUIController : MonoBehaviour
             return;
         }
 
-        // CanvasGroup 자동 구성
+        // RectTransform 앵커를 전체 화면(Full Stretch)으로 자동 보정
+        RectTransform rt = GetComponent<RectTransform>();
+        if (rt != null)
+        {
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            rt.localScale = Vector3.one;
+        }
+
+        // CanvasGroup 자동 구성 및 초기 투명화
         if (canvasGroup == null)
         {
             canvasGroup = GetComponent<CanvasGroup>();
