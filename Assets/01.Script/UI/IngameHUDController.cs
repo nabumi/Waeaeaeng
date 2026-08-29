@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -59,7 +59,7 @@ public class IngameHUDController : MonoBehaviour
         var allCanvases = Resources.FindObjectsOfTypeAll<Canvas>();
         foreach (var c in allCanvases)
         {
-            if (c.gameObject.scene.isLoaded && c.renderMode != RenderMode.WorldSpace)
+            if (c != null && c.gameObject.scene.isLoaded && c.renderMode != RenderMode.WorldSpace)
             {
                 targetCanvas = c;
                 break;
@@ -72,7 +72,10 @@ public class IngameHUDController : MonoBehaviour
             host = new GameObject("[IngameHUDController]");
         }
 
-        var hud = host.GetComponent<IngameHUDController>() ?? host.AddComponent<IngameHUDController>();
+        if (!host.TryGetComponent<IngameHUDController>(out var hud))
+        {
+            hud = host.AddComponent<IngameHUDController>();
+        }
         Instance = hud;
         hud.BindComponents();
         return hud;
@@ -153,21 +156,20 @@ public class IngameHUDController : MonoBehaviour
             var allTmps = Resources.FindObjectsOfTypeAll<TextMeshProUGUI>();
             foreach (var tmp in allTmps)
             {
-                if (!tmp.gameObject.scene.isLoaded) continue;
-                if (tmp.name.IndexOf("Time", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    (tmp.transform.parent != null && tmp.transform.parent.name.IndexOf("Time", StringComparison.OrdinalIgnoreCase) >= 0) ||
-                    tmp.text.IndexOf("TIme", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    tmp.text.IndexOf("Time", StringComparison.OrdinalIgnoreCase) >= 0)
+                if (tmp == null || !tmp.gameObject.scene.isLoaded) continue;
+                string goName = tmp.name ?? "";
+                string parentName = tmp.transform.parent != null ? (tmp.transform.parent.name ?? "") : "";
+                string textVal = tmp.text ?? "";
+
+                if (goName.IndexOf("Time", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    parentName.IndexOf("Time", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    textVal.IndexOf("TIme", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    textVal.IndexOf("Time", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     timeTmpText = tmp;
                     break;
                 }
             }
-        }
-
-        if (timeTmpText != null)
-        {
-            Debug.Log($"[IngameHUDController] Time UI bound: {timeTmpText.gameObject.name}");
         }
     }
 
@@ -187,31 +189,33 @@ public class IngameHUDController : MonoBehaviour
             var allTmps = Resources.FindObjectsOfTypeAll<TextMeshProUGUI>();
             foreach (var tmp in allTmps)
             {
-                if (!tmp.gameObject.scene.isLoaded) continue;
+                if (tmp == null || !tmp.gameObject.scene.isLoaded) continue;
                 if (tmp == timeTmpText) continue;
-                if (tmp.name.IndexOf("Blood", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    (tmp.transform.parent != null && tmp.transform.parent.name.IndexOf("Blood", StringComparison.OrdinalIgnoreCase) >= 0) ||
-                    tmp.text.IndexOf("10000", StringComparison.OrdinalIgnoreCase) >= 0)
+                string goName = tmp.name ?? "";
+                string parentName = tmp.transform.parent != null ? (tmp.transform.parent.name ?? "") : "";
+                string textVal = tmp.text ?? "";
+
+                if (goName.IndexOf("Blood", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    parentName.IndexOf("Blood", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    textVal.IndexOf("10000", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     bloodTmpText = tmp;
                     break;
                 }
             }
         }
-
-        if (bloodTmpText != null)
-        {
-            Debug.Log($"[IngameHUDController] Blood UI bound: {bloodTmpText.gameObject.name}");
-        }
     }
 
     private Transform FindChildRecursive(Transform parent, params string[] candidateNames)
     {
+        if (parent == null) return null;
         foreach (Transform child in parent)
         {
+            if (child == null) continue;
+            string cName = child.name ?? "";
             foreach (var name in candidateNames)
             {
-                if (child.name.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0)
+                if (!string.IsNullOrEmpty(name) && cName.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     return child;
                 }

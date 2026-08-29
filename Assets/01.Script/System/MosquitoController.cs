@@ -102,7 +102,8 @@ public class MosquitoController : MonoBehaviour
         rb = GetComponent<Rigidbody2D>();
         playerInput = GetComponent<PlayerInput>();
         animator = GetComponentInChildren<Animator>();
-        spriteRenderer = GetComponentInChildren<SpriteRenderer>() ?? GetComponent<SpriteRenderer>();
+        spriteRenderer = GetComponentInChildren<SpriteRenderer>();
+        if (spriteRenderer == null) spriteRenderer = GetComponent<SpriteRenderer>();
         rb.gravityScale = 0f;
 
         if (spriteRenderer != null) spriteRenderer.sortingOrder = 10;
@@ -634,7 +635,8 @@ public class MosquitoController : MonoBehaviour
         if (hit == null) return;
 
         Vector3 landingPoint = hit.ClosestPoint(transform.position);
-        BitingZone bZone = hit.GetComponent<BitingZone>() ?? hit.GetComponentInParent<BitingZone>();
+        BitingZone bZone = hit.GetComponent<BitingZone>();
+        if (bZone == null) bZone = hit.GetComponentInParent<BitingZone>();
 
         if (bZone == null)
         {
@@ -652,7 +654,8 @@ public class MosquitoController : MonoBehaviour
         currentBitingZone = bZone;
         currentZoneMaxSuckAmount = bZone.GetMaxSuckAmount();
 
-        IBodyPartZone zone = hit.GetComponent<IBodyPartZone>() ?? hit.GetComponentInParent<IBodyPartZone>();
+        IBodyPartZone zone = hit.GetComponent<IBodyPartZone>();
+        if (zone == null) zone = hit.GetComponentInParent<IBodyPartZone>();
         if (zone != null)
         {
             currentZoneDangerRatio = zone.DangerProbability;

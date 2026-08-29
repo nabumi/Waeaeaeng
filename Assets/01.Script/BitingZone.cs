@@ -32,7 +32,8 @@ public class BitingZone : MonoBehaviour
     {
         if (biteMarkSprite == null)
         {
-            biteMarkSprite = Resources.Load<Sprite>("Sprites/모기자국2") ?? Resources.Load<Sprite>("Sprites/물린자국");
+            biteMarkSprite = Resources.Load<Sprite>("Sprites/모기자국2");
+            if (biteMarkSprite == null) biteMarkSprite = Resources.Load<Sprite>("Sprites/물린자국");
         }
     }
 
@@ -90,7 +91,8 @@ public class BitingZone : MonoBehaviour
         {
             if (biteMarkSprite == null)
             {
-                biteMarkSprite = Resources.Load<Sprite>("Sprites/모기자국2") ?? Resources.Load<Sprite>("Sprites/물린자국");
+                biteMarkSprite = Resources.Load<Sprite>("Sprites/모기자국2");
+                if (biteMarkSprite == null) biteMarkSprite = Resources.Load<Sprite>("Sprites/물린자국");
             }
 
             if (biteMarkSprite != null)

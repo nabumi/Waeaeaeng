@@ -2,31 +2,32 @@ using System;
 using System.Collections;
 using TMPro;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 /// <summary>
-/// Tutorial popup UI controller in Lobby (Title scene)
+/// 설명서(튜토리얼 팝업) 컨트롤러
+/// - 고화질 그래픽 조작 가이드 이미지 표시
+/// - 화면 어디든 클릭하거나 아무 키나 누르면 즉시 게임 플레이(인게임)로 전환
 /// </summary>
+[RequireComponent(typeof(CanvasGroup))]
 public class TutorialPopupController : MonoBehaviour
 {
     public static TutorialPopupController Instance { get; private set; }
 
     [Header("Fade Settings")]
-    [SerializeField] private float fadeInDuration = 0.3f;
+    [SerializeField] private float fadeInDuration = 0.25f;
 
     [Header("UI Component Bindings")]
     [SerializeField] private CanvasGroup canvasGroup;
-    [SerializeField] private TextMeshProUGUI titleText;
-    [SerializeField] private TextMeshProUGUI guideText;
-    [SerializeField] private Image backgroundImage;
-
-    [Header("Button Bindings")]
-    [SerializeField] private Button startGameButton;
-    [SerializeField] private Button closeButton;
+    [SerializeField] private Image guideImage;
+    [SerializeField] private Sprite guideSprite;
 
     private Coroutine fadeCoroutine;
     private Action onStartGameCallback;
+    private bool isPopupOpen = false;
+    private float openTimestamp = 0f;
 
     private void Awake()
     {
@@ -37,24 +38,85 @@ public class TutorialPopupController : MonoBehaviour
             return;
         }
 
+        EnsureCanvasGroup();
+        EnsureGuideVisual();
+        BindComponents();
+    }
+
+    private void EnsureCanvasGroup()
+    {
         if (canvasGroup == null)
         {
-            canvasGroup = GetComponent<CanvasGroup>() ?? gameObject.AddComponent<CanvasGroup>();
+            if (!TryGetComponent<CanvasGroup>(out canvasGroup))
+            {
+                canvasGroup = gameObject.AddComponent<CanvasGroup>();
+            }
+        }
+    }
+
+    private void EnsureGuideVisual()
+    {
+        if (guideSprite == null)
+        {
+            guideSprite = Resources.Load<Sprite>("ui/tutorial_guide");
         }
 
-        BindComponents();
+        if (guideImage == null)
+        {
+            var contentPanel = FindChildRecursive(transform, "ContentPanel", "Guide", "Panel", "Image");
+            if (contentPanel != null)
+            {
+                guideImage = contentPanel.GetComponent<Image>();
+            }
+            if (guideImage == null)
+            {
+                guideImage = GetComponentInChildren<Image>();
+            }
+        }
+
+        if (guideImage != null)
+        {
+            if (guideSprite != null)
+            {
+                guideImage.sprite = guideSprite;
+            }
+            guideImage.color = Color.white;
+            guideImage.preserveAspect = true;
+        }
     }
 
     private void Start()
     {
         if (Instance == null) Instance = this;
+        EnsureCanvasGroup();
+        EnsureGuideVisual();
+
         if (canvasGroup != null)
         {
             canvasGroup.alpha = 0f;
             canvasGroup.interactable = false;
             canvasGroup.blocksRaycasts = false;
         }
+        isPopupOpen = false;
         gameObject.SetActive(false);
+    }
+
+    private void Update()
+    {
+        if (!isPopupOpen) return;
+
+        // 팝업 열린 직후 0.08초 동안은 오입력 방지
+        if (Time.unscaledTime - openTimestamp < 0.08f) return;
+
+        // 마우스 클릭, 터치, 또는 아무 키 입력 감지 시 게임 시작
+        bool isClicked = (Mouse.current != null && (Mouse.current.leftButton.wasPressedThisFrame || Mouse.current.rightButton.wasPressedThisFrame)) ||
+                         (Touchscreen.current != null && Touchscreen.current.primaryTouch.press.wasPressedThisFrame) ||
+                         (Keyboard.current != null && Keyboard.current.anyKey.wasPressedThisFrame);
+
+        if (isClicked)
+        {
+            OnStartGameClicked();
+        }
     }
 
 #if UNITY_EDITOR
@@ -66,43 +128,43 @@ public class TutorialPopupController : MonoBehaviour
 
     public void BindComponents()
     {
-        if (canvasGroup == null) canvasGroup = GetComponent<CanvasGroup>() ?? gameObject.AddComponent<CanvasGroup>();
+        EnsureCanvasGroup();
+        EnsureGuideVisual();
 
-        if (startGameButton == null)
-        {
-            var t = FindChildRecursive(transform, "StartGameButton", "StartButton", "Start", "Play");
-            if (t != null) startGameButton = t.GetComponent<Button>() ?? t.gameObject.AddComponent<Button>();
-        }
-        if (startGameButton != null)
-        {
-            startGameButton.onClick.RemoveListener(OnStartGameClicked);
-            startGameButton.onClick.AddListener(OnStartGameClicked);
-        }
+        // 1. 기존 텍스트 및 서브 버튼들 숨김 (이미지 자체에 모든 가이드가 깔끔하게 포함됨)
+        var oldTitle = FindChildRecursive(transform, "HeaderTitle", "Title");
+        if (oldTitle != null) oldTitle.gameObject.SetActive(false);
 
-        if (closeButton == null)
-        {
-            var t = FindChildRecursive(transform, "CloseButton", "Exit", "Close", "X");
-            if (t != null) closeButton = t.GetComponent<Button>() ?? t.gameObject.AddComponent<Button>();
-        }
-        if (closeButton != null)
-        {
-            closeButton.onClick.RemoveListener(OnCloseClicked);
-            closeButton.onClick.AddListener(OnCloseClicked);
-        }
+        var oldGuide = FindChildRecursive(transform, "GuideContent", "Content");
+        if (oldGuide != null) oldGuide.gameObject.SetActive(false);
 
-        if (titleText == null)
-        {
-            var t = FindChildRecursive(transform, "HeaderTitle", "Title");
-            if (t != null) titleText = t.GetComponent<TextMeshProUGUI>();
-        }
+        var oldCloseBtn = FindChildRecursive(transform, "CloseButton", "Exit", "Close");
+        if (oldCloseBtn != null) oldCloseBtn.gameObject.SetActive(false);
 
-        if (guideText == null)
+        var oldStartBtn = FindChildRecursive(transform, "StartGameButton", "StartButton");
+        if (oldStartBtn != null) oldStartBtn.gameObject.SetActive(false);
+
+        // 2. 딤 배경 및 패널에 클릭 버튼 바인딩 (화면 전체 어디를 눌러도 게임 시작)
+        var dimBg = FindChildRecursive(transform, "DimBackground", "Background", "Dim");
+        if (dimBg != null)
         {
-            var t = FindChildRecursive(transform, "GuideContent", "Content", "Text (TMP)");
-            if (t != null && (titleText == null || t != titleText.transform))
+            if (!dimBg.TryGetComponent<Button>(out var bgBtn))
             {
-                guideText = t.GetComponent<TextMeshProUGUI>();
+                bgBtn = dimBg.gameObject.AddComponent<Button>();
             }
+            bgBtn.onClick.RemoveListener(OnStartGameClicked);
+            bgBtn.onClick.AddListener(OnStartGameClicked);
+        }
+
+        var contentPanel = FindChildRecursive(transform, "ContentPanel");
+        if (contentPanel != null)
+        {
+            if (!contentPanel.TryGetComponent<Button>(out var panelBtn))
+            {
+                panelBtn = contentPanel.gameObject.AddComponent<Button>();
+            }
+            panelBtn.onClick.RemoveListener(OnStartGameClicked);
+            panelBtn.onClick.AddListener(OnStartGameClicked);
         }
     }
 
@@ -135,12 +197,11 @@ public class TutorialPopupController : MonoBehaviour
         gameObject.SetActive(true);
         transform.SetAsLastSibling();
 
-        for (int i = 0; i < transform.childCount; i++)
-        {
-            transform.GetChild(i).gameObject.SetActive(true);
-        }
-
+        EnsureGuideVisual();
         BindComponents();
+
+        isPopupOpen = true;
+        openTimestamp = Time.unscaledTime;
 
         if (fadeCoroutine != null) StopCoroutine(fadeCoroutine);
         fadeCoroutine = StartCoroutine(FadeRoutine(1.0f, true));
@@ -151,6 +212,7 @@ public class TutorialPopupController : MonoBehaviour
     /// </summary>
     public void HideTutorial()
     {
+        isPopupOpen = false;
         if (fadeCoroutine != null) StopCoroutine(fadeCoroutine);
         fadeCoroutine = StartCoroutine(FadeRoutine(0.0f, false, () => {
             gameObject.SetActive(false);
@@ -159,30 +221,36 @@ public class TutorialPopupController : MonoBehaviour
 
     private IEnumerator FadeRoutine(float targetAlpha, bool interactable, Action onComplete = null)
     {
-        if (canvasGroup == null) canvasGroup = GetComponent<CanvasGroup>() ?? gameObject.AddComponent<CanvasGroup>();
+        EnsureCanvasGroup();
 
-        float startAlpha = canvasGroup.alpha;
-        float elapsed = 0f;
-
-        canvasGroup.interactable = false;
-        canvasGroup.blocksRaycasts = interactable;
-
-        while (elapsed < fadeInDuration)
+        if (canvasGroup != null)
         {
-            elapsed += Time.unscaledDeltaTime;
-            canvasGroup.alpha = Mathf.Lerp(startAlpha, targetAlpha, elapsed / fadeInDuration);
-            yield return null;
-        }
+            float startAlpha = canvasGroup.alpha;
+            float elapsed = 0f;
 
-        canvasGroup.alpha = targetAlpha;
-        canvasGroup.interactable = interactable;
-        canvasGroup.blocksRaycasts = interactable;
+            canvasGroup.interactable = false;
+            canvasGroup.blocksRaycasts = interactable;
+
+            while (elapsed < fadeInDuration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                canvasGroup.alpha = Mathf.Lerp(startAlpha, targetAlpha, elapsed / fadeInDuration);
+                yield return null;
+            }
+
+            canvasGroup.alpha = targetAlpha;
+            canvasGroup.interactable = interactable;
+            canvasGroup.blocksRaycasts = interactable;
+        }
 
         onComplete?.Invoke();
     }
 
     public void OnStartGameClicked()
     {
+        if (!isPopupOpen && !gameObject.activeInHierarchy) return;
+        isPopupOpen = false;
+
         Time.timeScale = 1.0f;
         if (onStartGameCallback != null)
         {
@@ -196,6 +264,6 @@ public class TutorialPopupController : MonoBehaviour
 
     public void OnCloseClicked()
     {
-        HideTutorial();
+        OnStartGameClicked();
     }
 }

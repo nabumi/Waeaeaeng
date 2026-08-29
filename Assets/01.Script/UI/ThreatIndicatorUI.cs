@@ -29,6 +29,11 @@ public class ThreatIndicatorUI : MonoBehaviour
     private void OnEnable()
     {
         // 2. 센서 이벤트 구독 (옵저버 패턴)
+        if (threatSensor == null)
+        {
+            threatSensor = FindAnyObjectByType<MosquitoThreatSensor>();
+        }
+
         if (threatSensor != null)
         {
             threatSensor.OnThreatLevelChanged += HandleThreatLevelChanged;

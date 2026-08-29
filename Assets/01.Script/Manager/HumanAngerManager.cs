@@ -103,6 +103,23 @@ public class HumanAngerManager : MonoBehaviour
 
         if (targetCanvas == null)
         {
+            var allCanvases = Resources.FindObjectsOfTypeAll<Canvas>();
+            foreach (var c in allCanvases)
+            {
+                if (c != null && c.gameObject.scene.isLoaded && c.renderMode != RenderMode.WorldSpace)
+                {
+                    targetCanvas = c;
+                    break;
+                }
+            }
+            if (targetCanvas == null)
+            {
+                targetCanvas = Object.FindAnyObjectByType<Canvas>();
+            }
+        }
+
+        if (targetCanvas == null)
+        {
             Debug.LogError("<color=red>[HumanAngerManager] targetCanvas를 찾을 수 없습니다!</color>");
             isAttacking = false;
             yield break;

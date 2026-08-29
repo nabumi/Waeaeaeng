@@ -9,6 +9,7 @@ using UnityEngine.UI;
 /// 게임 종료 시(사망 또는 탈출 성공) 자연스럽게 페이드인되는 통합 결과창 UI 컨트롤러
 /// (사망 모드: GAME OVER / 승리 모드: GAME CLEAR 완벽 분기 지원)
 /// </summary>
+[RequireComponent(typeof(CanvasGroup))]
 public class GameOverUIController : MonoBehaviour
 {
     public static GameOverUIController Instance { get; private set; }
@@ -53,12 +54,19 @@ public class GameOverUIController : MonoBehaviour
             rt.localScale = Vector3.one;
         }
 
+        EnsureCanvasGroup();
+        BindComponents();
+    }
+
+    private void EnsureCanvasGroup()
+    {
         if (canvasGroup == null)
         {
-            canvasGroup = GetComponent<CanvasGroup>() ?? gameObject.AddComponent<CanvasGroup>();
+            if (!TryGetComponent<CanvasGroup>(out canvasGroup))
+            {
+                canvasGroup = gameObject.AddComponent<CanvasGroup>();
+            }
         }
-
-        BindComponents();
     }
 
     private void Start()
@@ -138,7 +146,13 @@ public class GameOverUIController : MonoBehaviour
         if (restartButton == null)
         {
             var t = FindChildRecursive(transform, "restart", "재시작", "retry");
-            if (t != null) restartButton = t.GetComponent<Button>() ?? t.gameObject.AddComponent<Button>();
+            if (t != null)
+            {
+                if (!t.TryGetComponent<Button>(out restartButton))
+                {
+                    restartButton = t.gameObject.AddComponent<Button>();
+                }
+            }
         }
         if (restartButton != null)
         {
@@ -149,7 +163,13 @@ public class GameOverUIController : MonoBehaviour
         if (lobbyButton == null)
         {
             var t = FindChildRecursive(transform, "lobby", "로비", "title", "main");
-            if (t != null) lobbyButton = t.GetComponent<Button>() ?? t.gameObject.AddComponent<Button>();
+            if (t != null)
+            {
+                if (!t.TryGetComponent<Button>(out lobbyButton))
+                {
+                    lobbyButton = t.gameObject.AddComponent<Button>();
+                }
+            }
         }
         if (lobbyButton != null)
         {
@@ -160,7 +180,13 @@ public class GameOverUIController : MonoBehaviour
         if (gameEndButton == null)
         {
             var t = FindChildRecursive(transform, "gameend", "종료", "exit", "quit", "end");
-            if (t != null) gameEndButton = t.GetComponent<Button>() ?? t.gameObject.AddComponent<Button>();
+            if (t != null)
+            {
+                if (!t.TryGetComponent<Button>(out gameEndButton))
+                {
+                    gameEndButton = t.gameObject.AddComponent<Button>();
+                }
+            }
         }
         if (gameEndButton != null)
         {
@@ -275,25 +301,31 @@ public class GameOverUIController : MonoBehaviour
 
     private IEnumerator FadeInRoutine()
     {
-        if (canvasGroup == null)
-        {
-            canvasGroup = GetComponent<CanvasGroup>() ?? gameObject.AddComponent<CanvasGroup>();
-        }
+        EnsureCanvasGroup();
 
-        canvasGroup.alpha = 0f;
-        canvasGroup.interactable = false;
-        canvasGroup.blocksRaycasts = true;
+        if (canvasGroup != null)
+        {
+            canvasGroup.alpha = 0f;
+            canvasGroup.interactable = false;
+            canvasGroup.blocksRaycasts = true;
+        }
 
         float timer = 0f;
         while (timer < fadeInDuration)
         {
             timer += Time.unscaledDeltaTime;
-            canvasGroup.alpha = Mathf.Clamp01(timer / fadeInDuration);
+            if (canvasGroup != null)
+            {
+                canvasGroup.alpha = Mathf.Clamp01(timer / fadeInDuration);
+            }
             yield return null;
         }
 
-        canvasGroup.alpha = 1.0f;
-        canvasGroup.interactable = true;
+        if (canvasGroup != null)
+        {
+            canvasGroup.alpha = 1.0f;
+            canvasGroup.interactable = true;
+        }
         Debug.Log("<color=green>[GameOverUIController] 결과창 페이드인 완료</color>");
     }
 

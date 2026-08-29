@@ -8,6 +8,7 @@ using UnityEngine.UI;
 /// <summary>
 /// 탈출 성공 시 자연스럽게 페이드인되며 클리어 통계를 보여주는 승리(Game Clear) 결과창 UI 컨트롤러
 /// </summary>
+[RequireComponent(typeof(CanvasGroup))]
 public class GameClearUIController : MonoBehaviour
 {
     public static GameClearUIController Instance { get; private set; }
@@ -56,12 +57,19 @@ public class GameClearUIController : MonoBehaviour
             rt.localScale = Vector3.one;
         }
 
+        EnsureCanvasGroup();
+        BindComponents();
+    }
+
+    private void EnsureCanvasGroup()
+    {
         if (canvasGroup == null)
         {
-            canvasGroup = GetComponent<CanvasGroup>() ?? gameObject.AddComponent<CanvasGroup>();
+            if (!TryGetComponent<CanvasGroup>(out canvasGroup))
+            {
+                canvasGroup = gameObject.AddComponent<CanvasGroup>();
+            }
         }
-
-        BindComponents();
     }
 
     private void Start()
@@ -142,7 +150,8 @@ public class GameClearUIController : MonoBehaviour
             }
 
             // Resources.Load 폴백
-            var resSprite = Resources.Load<Sprite>("ui/gameclear") ?? Resources.Load<Sprite>("gameclear");
+            var resSprite = Resources.Load<Sprite>("ui/gameclear");
+            if (resSprite == null) resSprite = Resources.Load<Sprite>("gameclear");
             if (resSprite != null)
             {
                 clearSprite = resSprite;
@@ -210,7 +219,13 @@ public class GameClearUIController : MonoBehaviour
         if (restartButton == null)
         {
             var t = FindChildRecursive(transform, "restart", "재시작", "retry");
-            if (t != null) restartButton = t.GetComponent<Button>() ?? t.gameObject.AddComponent<Button>();
+            if (t != null)
+            {
+                if (!t.TryGetComponent<Button>(out restartButton))
+                {
+                    restartButton = t.gameObject.AddComponent<Button>();
+                }
+            }
         }
         if (restartButton != null)
         {
@@ -221,7 +236,13 @@ public class GameClearUIController : MonoBehaviour
         if (lobbyButton == null)
         {
             var t = FindChildRecursive(transform, "lobby", "로비", "title", "main");
-            if (t != null) lobbyButton = t.GetComponent<Button>() ?? t.gameObject.AddComponent<Button>();
+            if (t != null)
+            {
+                if (!t.TryGetComponent<Button>(out lobbyButton))
+                {
+                    lobbyButton = t.gameObject.AddComponent<Button>();
+                }
+            }
         }
         if (lobbyButton != null)
         {
@@ -232,7 +253,13 @@ public class GameClearUIController : MonoBehaviour
         if (gameEndButton == null)
         {
             var t = FindChildRecursive(transform, "gameend", "종료", "exit", "quit", "end");
-            if (t != null) gameEndButton = t.GetComponent<Button>() ?? t.gameObject.AddComponent<Button>();
+            if (t != null)
+            {
+                if (!t.TryGetComponent<Button>(out gameEndButton))
+                {
+                    gameEndButton = t.gameObject.AddComponent<Button>();
+                }
+            }
         }
         if (gameEndButton != null)
         {
@@ -315,22 +342,31 @@ public class GameClearUIController : MonoBehaviour
 
     private IEnumerator FadeInRoutine()
     {
-        if (canvasGroup == null) canvasGroup = GetComponent<CanvasGroup>() ?? gameObject.AddComponent<CanvasGroup>();
+        EnsureCanvasGroup();
 
-        canvasGroup.alpha = 0f;
-        canvasGroup.interactable = false;
-        canvasGroup.blocksRaycasts = true;
+        if (canvasGroup != null)
+        {
+            canvasGroup.alpha = 0f;
+            canvasGroup.interactable = false;
+            canvasGroup.blocksRaycasts = true;
+        }
 
         float timer = 0f;
         while (timer < fadeInDuration)
         {
             timer += Time.unscaledDeltaTime;
-            canvasGroup.alpha = Mathf.Clamp01(timer / fadeInDuration);
+            if (canvasGroup != null)
+            {
+                canvasGroup.alpha = Mathf.Clamp01(timer / fadeInDuration);
+            }
             yield return null;
         }
 
-        canvasGroup.alpha = 1.0f;
-        canvasGroup.interactable = true;
+        if (canvasGroup != null)
+        {
+            canvasGroup.alpha = 1.0f;
+            canvasGroup.interactable = true;
+        }
         Debug.Log("<color=green>[GameClearUIController] 클리어 화면 페이드인 완료</color>");
     }
 

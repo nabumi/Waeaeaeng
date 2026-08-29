@@ -24,7 +24,7 @@ public class SoundToggle : MonoBehaviour
 
     private void UpdateUI()
     {
-        soundOnImage.SetActive(isSoundOn);
-        soundOffImage.SetActive(!isSoundOn);
+        if (soundOnImage != null) soundOnImage.SetActive(isSoundOn);
+        if (soundOffImage != null) soundOffImage.SetActive(!isSoundOn);
     }
 }

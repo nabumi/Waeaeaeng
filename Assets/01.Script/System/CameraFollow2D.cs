@@ -23,7 +23,17 @@ public class CameraFollow2D : MonoBehaviour
 
     private void LateUpdate()
     {
-        // 1. 추적 대상이 없는 예외 상황 방지 (플레이어 사망/파괴 시 안전장치)
+        // 1. 추적 대상이 없는 경우 자동 탐색
+        if (target == null)
+        {
+            var player = GameObject.FindGameObjectWithTag("Player");
+            if (player != null) target = player.transform;
+            else
+            {
+                var mosquito = FindAnyObjectByType<MosquitoController>();
+                if (mosquito != null) target = mosquito.transform;
+            }
+        }
         if (target == null) return;
 
         // 2. 모기의 현재 위치에 Z 오프셋(-10)을 더한 최종 목표 위치 산출

@@ -19,7 +19,8 @@ public class amosquitoLobbysound : MonoBehaviour
             float delay = Random.Range(minDelay, maxDelay);
             yield return new WaitForSeconds(delay);
 
-            if (!audioSource.isPlaying)
+            if (audioSource == null) audioSource = GetComponent<AudioSource>();
+            if (audioSource != null && !audioSource.isPlaying)
             {
                 audioSource.Play();
             }

@@ -10,9 +10,13 @@ public class PauseManager : MonoBehaviour
     public void OnPause(InputAction.CallbackContext context)
     {
         if (!context.performed) return;
+        if (GameManager.Instance != null && GameManager.Instance.CurrentState != GameManager.GameState.Playing) return;
 
         isPaused = !isPaused;
-        pauseMenuUI.SetActive(isPaused);
+        if (pauseMenuUI != null)
+        {
+            pauseMenuUI.SetActive(isPaused);
+        }
 
         // 게임 일시정지 처리
         Time.timeScale = isPaused ? 0f : 1f;

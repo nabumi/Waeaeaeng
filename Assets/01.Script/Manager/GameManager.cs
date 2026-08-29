@@ -167,7 +167,10 @@ public class GameManager : MonoBehaviour
             gameoverObj.SetActive(true);
             var canvas = gameoverObj.GetComponent<Canvas>();
             if (canvas != null) canvas.enabled = true;
-            var ctrl = gameoverObj.GetComponent<GameOverUIController>() ?? gameoverObj.AddComponent<GameOverUIController>();
+            if (!gameoverObj.TryGetComponent<GameOverUIController>(out var ctrl))
+            {
+                ctrl = gameoverObj.AddComponent<GameOverUIController>();
+            }
             ctrl.ShowGameOverUI();
         }
         else if (GameOverUIController.Instance != null)
@@ -184,7 +187,10 @@ public class GameManager : MonoBehaviour
                     t.gameObject.SetActive(true);
                     var canvas = t.GetComponent<Canvas>();
                     if (canvas != null) canvas.enabled = true;
-                    var ctrl = t.GetComponent<GameOverUIController>() ?? t.gameObject.AddComponent<GameOverUIController>();
+                    if (!t.TryGetComponent<GameOverUIController>(out var ctrl))
+                    {
+                        ctrl = t.gameObject.AddComponent<GameOverUIController>();
+                    }
                     ctrl.ShowGameOverUI();
                     break;
                 }
@@ -209,7 +215,10 @@ public class GameManager : MonoBehaviour
             gameclearObj.SetActive(true);
             var canvas = gameclearObj.GetComponent<Canvas>();
             if (canvas != null) canvas.enabled = true;
-            var ctrl = gameclearObj.GetComponent<GameClearUIController>() ?? gameclearObj.AddComponent<GameClearUIController>();
+            if (!gameclearObj.TryGetComponent<GameClearUIController>(out var ctrl))
+            {
+                ctrl = gameclearObj.AddComponent<GameClearUIController>();
+            }
             ctrl.ShowGameClearUI();
         }
         else if (GameClearUIController.Instance != null)
@@ -226,7 +235,10 @@ public class GameManager : MonoBehaviour
                     t.gameObject.SetActive(true);
                     var canvas = t.GetComponent<Canvas>();
                     if (canvas != null) canvas.enabled = true;
-                    var ctrl = t.GetComponent<GameClearUIController>() ?? t.gameObject.AddComponent<GameClearUIController>();
+                    if (!t.TryGetComponent<GameClearUIController>(out var ctrl))
+                    {
+                        ctrl = t.gameObject.AddComponent<GameClearUIController>();
+                    }
                     ctrl.ShowGameClearUI();
                     break;
                 }

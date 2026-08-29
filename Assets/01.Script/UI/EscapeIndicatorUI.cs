@@ -105,7 +105,8 @@ public class EscapeIndicatorUI : MonoBehaviour
 
         if (mainCamera == null)
         {
-            mainCamera = Camera.main ?? FindAnyObjectByType<Camera>();
+            mainCamera = Camera.main;
+            if (mainCamera == null) mainCamera = FindAnyObjectByType<Camera>();
             if (mainCamera == null) return;
         }
 

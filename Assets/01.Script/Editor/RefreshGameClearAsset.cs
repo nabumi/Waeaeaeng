@@ -1,4 +1,4 @@
-﻿#if UNITY_EDITOR
+#if UNITY_EDITOR
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
@@ -10,6 +10,7 @@ public static class RefreshGameClearAsset
     {
         EditorApplication.delayCall += Refresh;
         EditorApplication.delayCall += FixHUD;
+        EditorApplication.delayCall += AutomatedGameVerification.RunAllTests;
     }
 
     [MenuItem("Tools/Fix GameClear Asset")]
@@ -66,17 +67,29 @@ public static class RefreshGameClearAsset
     [MenuItem("Tools/Fix Ingame HUD")]
     public static void FixHUD()
     {
-        var sceneCanvases = Resources.FindObjectsOfTypeAll<Canvas>();
-        foreach (var c in sceneCanvases)
+        try
         {
-            if (c.renderMode == RenderMode.WorldSpace) continue;
-            var hud = c.GetComponent<IngameHUDController>() ?? c.gameObject.AddComponent<IngameHUDController>();
-            if (hud != null)
+            var sceneCanvases = Resources.FindObjectsOfTypeAll<Canvas>();
+            foreach (var c in sceneCanvases)
             {
-                hud.BindComponents();
-                EditorUtility.SetDirty(hud);
-                EditorUtility.SetDirty(c.gameObject);
+                if (c == null || !c.gameObject.scene.isLoaded || c.renderMode == RenderMode.WorldSpace) continue;
+                if (c.gameObject.scene.name.IndexOf("Title", System.StringComparison.OrdinalIgnoreCase) >= 0) continue;
+
+                if (!c.TryGetComponent<IngameHUDController>(out var hud))
+                {
+                    hud = c.gameObject.AddComponent<IngameHUDController>();
+                }
+                if (hud != null)
+                {
+                    hud.BindComponents();
+                    EditorUtility.SetDirty(hud);
+                    EditorUtility.SetDirty(c.gameObject);
+                }
             }
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogWarning("[RefreshGameClearAsset] FixHUD Exception: " + ex.Message);
         }
     }
 }

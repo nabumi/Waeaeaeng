@@ -9,14 +9,17 @@ using UnityEngine;
 public class EscapeSystem : MonoBehaviour
 {
     private static EscapeSystem instance;
+    private static bool isQuitting = false;
+
     public static EscapeSystem Instance
     {
         get
         {
+            if (isQuitting) return null;
             if (instance == null)
             {
                 instance = FindAnyObjectByType<EscapeSystem>();
-                if (instance == null)
+                if (instance == null && Application.isPlaying)
                 {
                     var go = new GameObject("[EscapeSystem]");
                     instance = go.AddComponent<EscapeSystem>();
@@ -85,6 +88,16 @@ public class EscapeSystem : MonoBehaviour
         EnsureEscapePoints();
     }
 
+    private void OnDestroy()
+    {
+        if (instance == this) instance = null;
+    }
+
+    private void OnApplicationQuit()
+    {
+        isQuitting = true;
+    }
+
     private void OnEnable()
     {
         BloodManager.OnFullBelly += ActivateRandomEscapeZone;
@@ -133,7 +146,8 @@ public class EscapeSystem : MonoBehaviour
         // 3. 씬에서 "EscapePoints" 이름의 부모 오브젝트 탐색
         if (validList.Count == 0)
         {
-            var foundParent = GameObject.Find("EscapePoints") ?? GameObject.Find("[EscapePoints]");
+            var foundParent = GameObject.Find("EscapePoints");
+            if (foundParent == null) foundParent = GameObject.Find("[EscapePoints]");
             if (foundParent != null)
             {
                 escapePointsParent = foundParent.transform;
