@@ -7,24 +7,15 @@ using UnityEngine;
 public class BloodManager : MonoBehaviour
 {
     private static BloodManager instance;
-
-    // 애플리케이션 종료 또는 씬 종료 상태를 추적하는 정적 플래그
     private static bool isApplicationQuitting = false;
 
-    /// <summary>
-    /// 안전하게 인스턴스 존재 여부만 확인 (유령 오브젝트 생성 및 로그 방지)
-    /// </summary>
     public static bool HasInstance => instance != null && !isApplicationQuitting;
 
     public static BloodManager Instance
     {
         get
         {
-            // 1. 앱/씬 종료 중에는 새 오브젝트를 생성하지 않고 조용히 null을 반환하여 메모리 누수 및 유령 오브젝트 방지
-            if (isApplicationQuitting)
-            {
-                return null;
-            }
+            if (isApplicationQuitting) return null;
 
             if (instance == null)
             {
@@ -49,30 +40,37 @@ public class BloodManager : MonoBehaviour
     [Tooltip("게임 시작 시 지급되는 초기 혈액량")]
     [SerializeField] private float initialBlood = 40f;
 
+    // 내부 상태 변수
     private float currentBlood;
     private float totalSuckedBlood = 0f;
     private float gameStartTime = 0f;
+    private float finalSurvivalTime = 0f;
     private bool isTrackingTime = true;
     private bool isEscapeTriggered = false;
 
-    // 이벤트 라인업
+    // 외부 공개 이벤트 (Decoupling)
     public event Action<float, float> OnBloodAmountChanged;
     public event Action<float, float> OnBloodSucked;
     public static event Action OnFullBelly;
     public static event Action OnBloodDepleted;
 
+    // =========================================================================
+    // [외부 공개 프로퍼티 - GameOverUI 및 MosquitoController 연동]
+    // =========================================================================
     public float MaxTargetBlood => maxTargetBlood;
     public float EscapeThresholdBlood => escapeThresholdBlood;
     public float CurrentBlood => currentBlood;
     public float TotalSuckedBlood => totalSuckedBlood;
+
+    // 생존 시간 연산: 추적 중일 때는 현재 시간과의 차이, 멈췄을 때는 최종 기록 반환
     public float SurvivalTime => isTrackingTime ? (Time.time - gameStartTime) : finalSurvivalTime;
-    private float finalSurvivalTime = 0f;
+
+    // 상태 체크 프로퍼티
     public bool IsEscapeReady => currentBlood >= escapeThresholdBlood;
     public bool IsFull => currentBlood >= maxTargetBlood;
 
     private void Awake()
     {
-        // 씬 전환 후 활성화될 때 종료 플래그 초기화
         isApplicationQuitting = false;
 
         if (instance == null)
@@ -92,10 +90,9 @@ public class BloodManager : MonoBehaviour
     {
         gameStartTime = Time.time;
         isTrackingTime = true;
-        if (currentBlood <= 0f)
-        {
-            currentBlood = initialBlood > 0f ? initialBlood : 40f;
-        }
+
+        // ⚠️ [기존 버그 수정] Start에서 currentBlood <= 0f 일 때 
+        // 무조건 40f로 되돌려 버리던 삼항 연산자 강제 초기화 구문을 완전히 제거했습니다.
     }
 
     private void OnApplicationQuit()
@@ -110,6 +107,10 @@ public class BloodManager : MonoBehaviour
             isApplicationQuitting = true;
         }
     }
+
+    // =========================================================================
+    // [핵심 게임 로직 메서드]
+    // =========================================================================
 
     /// <summary>
     /// 혈액 소모 (비행 자연 소모, 대시 소모 등)
@@ -152,6 +153,9 @@ public class BloodManager : MonoBehaviour
         return actualSucked;
     }
 
+    /// <summary>
+    /// [F1 키 치트] 즉시 만복 상태로 변경
+    /// </summary>
     public void SetBloodFullCheat()
     {
         float added = maxTargetBlood - currentBlood;
@@ -169,6 +173,9 @@ public class BloodManager : MonoBehaviour
         Debug.LogWarning($"<color=cyan>[치트 활성화] F1 입력: 혈액량이 {maxTargetBlood}ml로 즉시 충전되었습니다!</color>");
     }
 
+    /// <summary>
+    /// 게임 오버 또는 클리어 시 생존 타이머를 멈추고 최종 기록 저장
+    /// </summary>
     public void StopTimer()
     {
         if (isTrackingTime)
@@ -178,11 +185,15 @@ public class BloodManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 혈액 수치 및 타이머 완벽 초기화
+    /// </summary>
     public void ResetBlood()
     {
         currentBlood = initialBlood > 0f ? initialBlood : 40f;
         totalSuckedBlood = 0f;
         gameStartTime = Time.time;
+        finalSurvivalTime = 0f;
         isTrackingTime = true;
         isEscapeTriggered = false;
         OnBloodAmountChanged?.Invoke(currentBlood, maxTargetBlood);

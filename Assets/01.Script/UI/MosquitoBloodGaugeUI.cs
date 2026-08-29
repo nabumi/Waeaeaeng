@@ -34,7 +34,7 @@ public class MosquitoBloodGaugeUI : MonoBehaviour
             canvas.renderMode = RenderMode.WorldSpace;
         }
 
-        // 자체 구성이 안 되어 있을 경우 기본 비주얼 자동 생성
+        // 컴포넌트 각각을 독립적으로 체크하여 누락 방지
         EnsureVisualComponents();
     }
 
@@ -57,11 +57,7 @@ public class MosquitoBloodGaugeUI : MonoBehaviour
 
     private void Start()
     {
-        if (targetMosquito == null)
-        {
-            var mosquito = FindAnyObjectByType<MosquitoController>();
-            if (mosquito != null) targetMosquito = mosquito.transform;
-        }
+        FindTargetMosquito();
 
         if (BloodManager.Instance != null)
         {
@@ -73,15 +69,14 @@ public class MosquitoBloodGaugeUI : MonoBehaviour
     {
         if (targetMosquito == null)
         {
-            var mosquito = FindAnyObjectByType<MosquitoController>();
-            if (mosquito != null) targetMosquito = mosquito.transform;
-            else return;
+            FindTargetMosquito();
+            if (targetMosquito == null) return;
         }
 
         // 모기 위치에 오프셋을 더해 따라다님
         transform.position = targetMosquito.position + offset;
 
-        // 카메라 방향을 바라보도록 회전 고정
+        // 빌보드 처리: 카메라 방향을 바라보도록 회전 고정
         if (mainCamera != null)
         {
             transform.rotation = Quaternion.identity;
@@ -89,17 +84,33 @@ public class MosquitoBloodGaugeUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 혈액량 변동 시 게이지 Fill 및 색상/텍스트 갱신
+    /// 모기 트랜스폼 탐색 (LateUpdate 내 무분별한 FindAnyObjectByType 방지)
+    /// </summary>
+    private void FindTargetMosquito()
+    {
+        if (targetMosquito != null) return;
+
+        var mosquito = FindAnyObjectByType<MosquitoController>();
+        if (mosquito != null)
+        {
+            targetMosquito = mosquito.transform;
+        }
+    }
+
+    /// <summary>
+    /// 혈액량 변동 시 게이지 Fill 및 색상/텍스트 갱신 (Zero-GC 최적화)
     /// </summary>
     public void UpdateGauge(float current, float max)
     {
+        // 백분율 $ratio = \text{Clamp01}(current / max)$
         float ratio = Mathf.Clamp01(current / max);
 
+        // 1. 게이지 바 Fill 및 색상 보간
         if (fillImage != null)
         {
             fillImage.fillAmount = ratio;
 
-            // 색상 보간: 0.5 이상 초록->노랑, 0.5 미만 노랑->빨강
+            // 색상 보간: $ratio > 0.5$ 일 때 초록->노랑, 이하일 때 노랑->빨강
             if (ratio > 0.5f)
             {
                 float t = (ratio - 0.5f) / 0.5f;
@@ -112,20 +123,20 @@ public class MosquitoBloodGaugeUI : MonoBehaviour
             }
         }
 
+        // 2. 텍스트 갱신 (TMP 전용 SetText 사용으로 GC Alloc $0\text{ bytes}$ 달성)
         if (bloodText != null)
         {
-            bloodText.text = $"{Mathf.CeilToInt(current)} ml";
+            int currentInt = Mathf.CeilToInt(current);
+            bloodText.SetText("{0} ml", currentInt);
             bloodText.color = ratio < 0.25f ? criticalColor : Color.white;
         }
     }
 
     /// <summary>
-    /// 인스펙터 바인딩이 누락되었을 때 코드로 깔끔한 WorldSpace 게이지 구성
+    /// 인스펙터 바인딩이 누락되었을 때 개별 컴포넌트 단위로 안전하게 런타임 자동 구성
     /// </summary>
     private void EnsureVisualComponents()
     {
-        if (fillImage != null && bgImage != null) return;
-
         // Canvas 설정
         if (canvas == null)
         {
@@ -142,52 +153,76 @@ public class MosquitoBloodGaugeUI : MonoBehaviour
             rt.localScale = Vector3.one;
         }
 
-        // 배경 바
+        // 1. 배경 바 독립 검사
         if (bgImage == null)
         {
-            var bgObj = new GameObject("Gauge_BG");
-            bgObj.transform.SetParent(transform, false);
-            var bgRt = bgObj.AddComponent<RectTransform>();
-            bgRt.anchorMin = Vector2.zero;
-            bgRt.anchorMax = Vector2.one;
-            bgRt.sizeDelta = Vector2.zero;
+            Transform bgTransform = transform.Find("Gauge_BG");
+            if (bgTransform != null)
+            {
+                bgImage = bgTransform.GetComponent<Image>();
+            }
+            else
+            {
+                var bgObj = new GameObject("Gauge_BG");
+                bgObj.transform.SetParent(transform, false);
+                var bgRt = bgObj.AddComponent<RectTransform>();
+                bgRt.anchorMin = Vector2.zero;
+                bgRt.anchorMax = Vector2.one;
+                bgRt.sizeDelta = Vector2.zero;
 
-            bgImage = bgObj.AddComponent<Image>();
-            bgImage.color = new Color(0.1f, 0.1f, 0.1f, 0.75f);
+                bgImage = bgObj.AddComponent<Image>();
+                bgImage.color = new Color(0.1f, 0.1f, 0.1f, 0.75f);
+            }
         }
 
-        // 채움 바
+        // 2. 채움 바 독립 검사
         if (fillImage == null)
         {
-            var fillObj = new GameObject("Gauge_Fill");
-            fillObj.transform.SetParent(transform, false);
-            var fillRt = fillObj.AddComponent<RectTransform>();
-            fillRt.anchorMin = new Vector2(0.04f, 0.15f);
-            fillRt.anchorMax = new Vector2(0.96f, 0.85f);
-            fillRt.sizeDelta = Vector2.zero;
+            Transform fillTransform = transform.Find("Gauge_Fill");
+            if (fillTransform != null)
+            {
+                fillImage = fillTransform.GetComponent<Image>();
+            }
+            else
+            {
+                var fillObj = new GameObject("Gauge_Fill");
+                fillObj.transform.SetParent(transform, false);
+                var fillRt = fillObj.AddComponent<RectTransform>();
+                fillRt.anchorMin = new Vector2(0.04f, 0.15f);
+                fillRt.anchorMax = new Vector2(0.96f, 0.85f);
+                fillRt.sizeDelta = Vector2.zero;
 
-            fillImage = fillObj.AddComponent<Image>();
-            fillImage.type = Image.Type.Filled;
-            fillImage.fillMethod = Image.FillMethod.Horizontal;
-            fillImage.fillOrigin = 0;
-            fillImage.color = fullColor;
+                fillImage = fillObj.AddComponent<Image>();
+                fillImage.type = Image.Type.Filled;
+                fillImage.fillMethod = Image.FillMethod.Horizontal;
+                fillImage.fillOrigin = 0;
+                fillImage.color = fullColor;
+            }
         }
 
-        // 수치 텍스트
+        // 3. 수치 텍스트 독립 검사 (성급한 리턴 제거로 100% 실행 보장)
         if (bloodText == null)
         {
-            var textObj = new GameObject("Gauge_Text");
-            textObj.transform.SetParent(transform, false);
-            var textRt = textObj.AddComponent<RectTransform>();
-            textRt.anchorMin = Vector2.zero;
-            textRt.anchorMax = Vector2.one;
-            textRt.sizeDelta = Vector2.zero;
+            Transform textTransform = transform.Find("Gauge_Text");
+            if (textTransform != null)
+            {
+                bloodText = textTransform.GetComponent<TextMeshProUGUI>();
+            }
+            else
+            {
+                var textObj = new GameObject("Gauge_Text");
+                textObj.transform.SetParent(transform, false);
+                var textRt = textObj.AddComponent<RectTransform>();
+                textRt.anchorMin = Vector2.zero;
+                textRt.anchorMax = Vector2.one;
+                textRt.sizeDelta = Vector2.zero;
 
-            bloodText = textObj.AddComponent<TextMeshProUGUI>();
-            bloodText.alignment = TextAlignmentOptions.Center;
-            bloodText.fontSize = 0.35f;
-            bloodText.text = "40 ml";
-            bloodText.color = Color.white;
+                bloodText = textObj.AddComponent<TextMeshProUGUI>();
+                bloodText.alignment = TextAlignmentOptions.Center;
+                bloodText.fontSize = 0.35f;
+                bloodText.text = "40 ml";
+                bloodText.color = Color.white;
+            }
         }
     }
 }

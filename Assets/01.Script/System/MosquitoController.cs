@@ -504,8 +504,16 @@ public class MosquitoController : MonoBehaviour
 
     private void CalculateEffectiveSpeed()
     {
-        float bloodFillRatio = Mathf.Clamp01(currentBlood / maxBlood);
-        float debuffMultiplier = 1.0f - (bloodFillRatio * speedDebuffPerLevel * 3f);
+        float bloodRatio = 0f;
+
+        // BloodManager 단일 진실 공급원에서 현재 혈액 비중 계산
+        if (BloodManager.Instance != null)
+        {
+            bloodRatio = Mathf.Clamp01(BloodManager.Instance.CurrentBlood / BloodManager.Instance.MaxTargetBlood);
+        }
+
+        // $v_{effective} = v_{base} \times \max(1 - ratio \times debuff \times 3, 0.4)$
+        float debuffMultiplier = 1.0f - (bloodRatio * speedDebuffPerLevel * 3f);
         effectiveMoveSpeed = baseMoveSpeed * Mathf.Max(debuffMultiplier, 0.4f);
     }
 
