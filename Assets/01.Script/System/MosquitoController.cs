@@ -88,6 +88,7 @@ public class MosquitoController : MonoBehaviour
     private Animator animator;
     private SpriteRenderer spriteRenderer;
     [SerializeField] private Sprite deathSprite;
+    [SerializeField] private Sprite dodgeSprite;
     private Vector2 moveInput;
 
     private InputAction checkAction;
@@ -414,26 +415,21 @@ public class MosquitoController : MonoBehaviour
         Time.timeScale = effectiveSlow;
         Time.fixedDeltaTime = 0.02f * Time.timeScale;
 
-        if (spriteRenderer != null)
+        // 닷지(대시) 스프라이트 적용
+        if (dodgeSprite != null && spriteRenderer != null)
         {
-            spriteRenderer.color = new Color(1f, 1f, 0.4f, 1f); // 대시 중 황금빛 잔상 플래시
+            spriteRenderer.sprite = dodgeSprite;
         }
 
         AudioManager.Instance?.PlaySFX(AudioManager.SFXType.Dash);
         UpdateAnimationState();
 
-        Debug.Log($"<color=yellow>[MosquitoController] ⚡ 불릿타임 대시 발동! (슬로우모션 Time.timeScale = {Time.timeScale:F2}, 지속시간 = {dashDuration}s)</color>");
+        Debug.Log($"<color=yellow>[MosquitoController] ⚡ 닷지(대시) 발동! (슬로우모션 Time.timeScale = {Time.timeScale:F2}, 지속시간 = {dashDuration}s)</color>");
 
         yield return new WaitForSecondsRealtime(dashDuration);
 
         isDashing = false;
         ResetTimeScale();
-
-        if (spriteRenderer != null)
-        {
-            spriteRenderer.color = Color.white;
-        }
-
         UpdateAnimationState();
     }
 

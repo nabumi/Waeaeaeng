@@ -1695,6 +1695,7 @@ MonoBehaviour:
   suckRate: 20
   speedDebuffPerLevel: 0.15
   deathSprite: {fileID: 0}
+  dodgeSprite: {fileID: -1142677910, guid: 4420329b2667d3549a3e17d89632adb3, type: 3}
 --- !u!50 &636591782
 Rigidbody2D:
   serializedVersion: 5
