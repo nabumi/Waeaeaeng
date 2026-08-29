@@ -147,7 +147,8 @@ public class HandAttackUIController : MonoBehaviour
             }
         }
 
-        // 손바닥 타격 피크 프레임에서 히트 판정 콜백 호출
+        // 손바닥 타격 피크 프레임에서 히트 판정 콜백 호출 및 타격음 재생
+        AudioManager.Instance?.PlaySFX(AudioManager.SFXType.Slap);
         onHitImpact?.Invoke();
 
         // ------------------------------------------------------------------

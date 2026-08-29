@@ -118,6 +118,7 @@ public class MosquitoController : MonoBehaviour
         SwitchActionMapSafely("Flying");
         UpdateAnimationState();
         OnBloodAmountChanged?.Invoke(currentBlood, maxBlood);
+        AudioManager.Instance?.StartMosquitoBuzz();
     }
 
     private void FixedUpdate()
@@ -163,6 +164,7 @@ public class MosquitoController : MonoBehaviour
         if (isDead || currentState != MosquitoState.Sucking) return;
 
         UpdateAnimationState();
+        AudioManager.Instance?.PlaySFX(AudioManager.SFXType.BloodSuck);
         Debug.Log("<color=red>[흡혈 중...] 좌클릭 홀드: 피를 빨기 시작합니다!</color>");
     }
 
@@ -267,6 +269,10 @@ public class MosquitoController : MonoBehaviour
 
         isDead = true;
         currentState = MosquitoState.Dead;
+
+        AudioManager.Instance?.StopMosquitoBuzz();
+        AudioManager.Instance?.PlaySFX(AudioManager.SFXType.Slap);
+        AudioManager.Instance?.PlaySFX(AudioManager.SFXType.GameOver);
 
         StopAllCoroutines();
 
@@ -384,10 +390,12 @@ public class MosquitoController : MonoBehaviour
 
         if (result == SkillCheckUI.SkillCheckResult.GreatSuccess)
         {
+            AudioManager.Instance?.PlaySFX(AudioManager.SFXType.QteGreat);
             StartSuckingSequence(); // 성공 시 4단계(Sucking)로 직행
         }
         else if (result == SkillCheckUI.SkillCheckResult.Success)
         {
+            AudioManager.Instance?.PlaySFX(AudioManager.SFXType.QteSuccess);
             currentSkillCheckCount++;
 
             if (currentSkillCheckCount >= requiredSkillChecks)
@@ -401,6 +409,7 @@ public class MosquitoController : MonoBehaviour
         }
         else // Fail (QTE 실패 시 손바닥 공격 및 비행으로 복귀)
         {
+            AudioManager.Instance?.PlaySFX(AudioManager.SFXType.QteFail);
             HumanAngerManager.Instance?.TriggerAttack(transform.position);
 
             currentState = MosquitoState.Flying;
