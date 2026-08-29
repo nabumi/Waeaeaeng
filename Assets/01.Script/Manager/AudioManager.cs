@@ -46,7 +46,9 @@ public class AudioManager : MonoBehaviour
         QteFail,        // QTE 실패 부저 사운드
         BloodSuck,      // 흡혈 꼴깍 사운드
         GameOver,       // 사망/게임오버 사운드
-        MosquitoBuzz    // 날갯짓 윙윙 소리
+        MosquitoBuzz,   // 날갯짓 윙윙 소리
+        EscapeReady,    // 탈출 가능 알림 사운드
+        Victory         // 승리/클리어 사운드
     }
 
     [Header("오디오 소스")]
@@ -67,6 +69,8 @@ public class AudioManager : MonoBehaviour
     [SerializeField] private AudioClip bloodSuckClip;
     [SerializeField] private AudioClip gameOverClip;
     [SerializeField] private AudioClip mosquitoBuzzClip;
+    [SerializeField] private AudioClip escapeReadyClip;
+    [SerializeField] private AudioClip victoryClip;
 
     [Header("볼륨 설정")]
     [Range(0f, 1f)][SerializeField] private float masterVolume = 1.0f;
@@ -172,8 +176,10 @@ public class AudioManager : MonoBehaviour
         if (bloodSuckClip == null) bloodSuckClip = Resources.Load<AudioClip>("Audio/sfx_blood_suck");
         if (gameOverClip == null) gameOverClip = Resources.Load<AudioClip>("Audio/sfx_gameover");
         if (mosquitoBuzzClip == null) mosquitoBuzzClip = Resources.Load<AudioClip>("Audio/freesound_community-single-mosquito-buzz-69360");
+        if (escapeReadyClip == null) escapeReadyClip = Resources.Load<AudioClip>("Audio/sfx_escape_ready");
+        if (victoryClip == null) victoryClip = Resources.Load<AudioClip>("Audio/sfx_victory");
 
-        Debug.Log($"<color=green>[AudioManager] 오디오 클립 로드 완료 -> BGM: {(inGameBGM != null ? inGameBGM.name : "null")}, Slap: {(slapClip != null ? slapClip.name : "null")}, Dash: {(dashClip != null ? dashClip.name : "null")}, Buzz: {(mosquitoBuzzClip != null ? mosquitoBuzzClip.name : "null")}</color>");
+        Debug.Log($"<color=green>[AudioManager] 오디오 클립 로드 완료 -> BGM: {(inGameBGM != null ? inGameBGM.name : "null")}, Slap: {(slapClip != null ? slapClip.name : "null")}, Dash: {(dashClip != null ? dashClip.name : "null")}, Victory: {(victoryClip != null ? victoryClip.name : "null")}</color>");
     }
 
     private void RegisterClips()
@@ -187,6 +193,8 @@ public class AudioManager : MonoBehaviour
         if (bloodSuckClip != null) sfxClipMap[SFXType.BloodSuck] = bloodSuckClip;
         if (gameOverClip != null) sfxClipMap[SFXType.GameOver] = gameOverClip;
         if (mosquitoBuzzClip != null) sfxClipMap[SFXType.MosquitoBuzz] = mosquitoBuzzClip;
+        if (escapeReadyClip != null) sfxClipMap[SFXType.EscapeReady] = escapeReadyClip;
+        if (victoryClip != null) sfxClipMap[SFXType.Victory] = victoryClip;
     }
 
     public void PlayBGM(AudioClip clip, bool loop = true)
