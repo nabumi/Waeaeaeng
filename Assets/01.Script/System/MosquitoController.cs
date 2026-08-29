@@ -340,34 +340,25 @@ public class MosquitoController : MonoBehaviour
             spriteRenderer.sprite = deathSprite;
         }
 
-        // 3. 타격 피격 압축 연출 (0.0s ~ 0.2s)
+        // 3. 타격 피격 압축 연출 (손바닥에 짓눌려 납작해짐)
         Vector3 baseScale = transform.localScale;
         float timer = 0f;
-        while (timer < 0.2f)
+        float flattenDuration = 0.15f;
+        while (timer < flattenDuration)
         {
             timer += Time.deltaTime;
-            float t = timer / 0.2f;
+            float t = timer / flattenDuration;
             transform.localScale = new Vector3(baseScale.x * Mathf.Lerp(1.0f, 1.4f, t), baseScale.y * Mathf.Lerp(1.0f, 0.4f, t), baseScale.z);
             yield return null;
         }
 
-        // 4. 빙글빙글 회전하며 낙하 연출 (0.2s ~ 1.0s)
-        timer = 0f;
-        float fallDuration = 0.8f;
-        Vector3 startPos = transform.position;
-        while (timer < fallDuration)
-        {
-            timer += Time.deltaTime;
-            float t = timer / fallDuration;
+        transform.localScale = new Vector3(baseScale.x * 1.4f, baseScale.y * 0.4f, baseScale.z);
 
-            // 회전 및 아래로 낙하
-            transform.rotation = Quaternion.Euler(0f, 0f, Mathf.Lerp(0f, 720f, t));
-            transform.position = startPos + new Vector3(0f, -Mathf.Sin(t * Mathf.PI * 0.5f) * 0.8f, 0f);
+        // 4. 납작해진 사망 상태로 1.0초까지 대기 (회전/추락 없이 제자리 유지)
+        float remainingDelay = Mathf.Max(0f, 1.0f - flattenDuration);
+        yield return new WaitForSeconds(remainingDelay);
 
-            yield return null;
-        }
-
-        // 5. 정확히 1.0초 사망 모션 완료 후 게임오버 이벤트 발화
+        // 5. 정확히 1.0초 후 게임오버 결과창 페이드인
         Debug.LogError("<color=yellow>[GAME OVER] 1.0초 사망 모션 완료 -> 게임오버 결과창 페이드인</color>");
         OnGameOver?.Invoke();
     }
