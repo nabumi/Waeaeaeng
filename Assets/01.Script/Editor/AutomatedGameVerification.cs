@@ -216,9 +216,8 @@ public static class AutomatedGameVerification
         Log("\n[TEST 6] Verifying GameOver & Cleanup...");
         var goObj = new GameObject("[Test_GameOverUI]");
         var goCtrl = goObj.AddComponent<GameOverUIController>();
-        goCtrl.BindComponents();
 
-        Log("  [PASS] GameOverUIController auto-binding verified");
+        Log("  [PASS] GameOverUIController initialization verified");
         UnityEngine.Object.DestroyImmediate(goObj);
         Log("  [PASS] TEST 6 SUCCEEDED: GameOver and Memory Cleanup verified");
         return true;

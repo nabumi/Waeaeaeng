@@ -161,7 +161,7 @@ public class GameClearUIController : MonoBehaviour
         }
     }
 
-    private void BindComponents()
+    public void BindComponents()
     {
         EnsureBackgroundSprite();
 

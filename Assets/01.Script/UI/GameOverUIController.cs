@@ -84,7 +84,7 @@ public class GameOverUIController : MonoBehaviour
         MosquitoController.OnGameOver -= ShowGameOverUI;
     }
 
-    private void BindComponents()
+    public void BindComponents()
     {
         // 1. "점수위치" 자식 오브젝트들에서 실제 값 텍스트를 정밀 탐색
         var scoreValueContainer = FindChildRecursive(transform, "점수위치");

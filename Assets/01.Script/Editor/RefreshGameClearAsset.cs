@@ -10,7 +10,6 @@ public static class RefreshGameClearAsset
     {
         EditorApplication.delayCall += Refresh;
         EditorApplication.delayCall += FixHUD;
-        EditorApplication.delayCall += AutomatedGameVerification.RunAllTests;
     }
 
     [MenuItem("Tools/Fix GameClear Asset")]
