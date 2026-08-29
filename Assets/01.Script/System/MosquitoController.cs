@@ -4,23 +4,23 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 /// <summary>
-/// 모기의 현재 행동 상태 정의
+/// 모기의 현재 행동 상태 정의 (4단계 핵심 루프)
 /// </summary>
 public enum MosquitoState
 {
-    Flying,          // 공중 비행
-    Landing,         // 피부 안착 중 (새로 추가!)
-    SkillChecking,   // QTE 스킬체크 진행 중
-    Feeding,         // 흡혈 가능 상태
-    Stunned,         // 손바닥 피격 스턴
-    Dead             // 피격 사망
+    Flying,     // 1단계: 공중 비행 및 이동
+    Landing,    // 2단계: 피부에 척 달라붙는 안착 모션
+    Checking,   // 3단계: 빨대를 꽂고 QTE 스킬체크 진행
+    Sucking,    // 4단계: 좌클릭을 꾹 눌러 피를 빠는 상태
+    Stunned,    // 피격 스턴 (예외 상태)
+    Dead        // 사망 (게임 오버)
 }
 
 [RequireComponent(typeof(Rigidbody2D), typeof(PlayerInput))]
 public class MosquitoController : MonoBehaviour
 {
     // =========================================================================
-    // [게임오버 이벤트] 나중에 결과창 UI 스크립트가 완성되면 이 이벤트에 구독만 하면 됩니다!
+    // [게임오버 이벤트] 결과창 UI 스크립트가 완성되면 이 이벤트에 구독하세요!
     // =========================================================================
     public static event Action OnGameOver;
 
@@ -49,9 +49,6 @@ public class MosquitoController : MonoBehaviour
     [SerializeField] private float currentBlood = 0f;
     [SerializeField] private float suckRate = 25f; // 초당 흡혈량
 
-    // 좌클릭 누름 유무를 판별하는 플래그
-    [SerializeField] private bool isSucking = false;
-
     [Header("흡혈 중 기습 공격 타이머")]
     [SerializeField] private float feedingCheckInterval = 1.0f;
     private float feedingTimer = 0f;
@@ -70,11 +67,11 @@ public class MosquitoController : MonoBehaviour
     private InputAction suckAction;      // 좌클릭 흡혈 액션
     private InputAction takeOffAction;   // 이륙 액션
 
+    // 애니메이션 해시 키값 최적화 캐싱
     private static readonly int HashIsFlying = Animator.StringToHash("IsFlying");
-    private static readonly int HashIsFeeding = Animator.StringToHash("IsFeeding");
-    private static readonly int HashIsSucking = Animator.StringToHash("IsSucking");
-    private static readonly int HashIsChecking = Animator.StringToHash("IsChecking");
     private static readonly int HashIsLanding = Animator.StringToHash("IsLanding");
+    private static readonly int HashIsChecking = Animator.StringToHash("IsChecking");
+    private static readonly int HashIsSucking = Animator.StringToHash("IsSucking");
 
     private void Awake()
     {
@@ -125,7 +122,6 @@ public class MosquitoController : MonoBehaviour
 
     private void FixedUpdate()
     {
-        // 사망 상태일 경우 물리 이동 완전 차단
         if (isDead || currentState == MosquitoState.Dead) return;
 
         if (currentState == MosquitoState.Flying)
@@ -146,65 +142,58 @@ public class MosquitoController : MonoBehaviour
 
     private void Update()
     {
-        // 사망 상태일 경우 로직 업데이트 차단
         if (isDead || currentState == MosquitoState.Dead) return;
 
         if (currentState == MosquitoState.Flying)
         {
             EvaluateFlyingLingerAttack();
         }
-        else if (currentState == MosquitoState.Feeding)
+        else if (currentState == MosquitoState.Sucking)
         {
-            // [수동 흡혈] 좌클릭을 누르고 있는 동안(isSucking == true)에만 흡혈 처리
-            if (isSucking)
-            {
-                ProcessBloodSucking();
-            }
-
-            // 피를 빠는 도중에만 위험도 판정을 강화해 기습 공격 체크
-            EvaluateFeedingDangerAttack();
+            // [4단계 흡혈] Sucking 상태이면서 좌클릭을 누르고 있을 때 피를 빤다!
+            ProcessBloodSucking();
+            EvaluateSuckingDangerAttack();
         }
     }
 
-    #region 수동 흡혈 입력 및 코어 연산
+    #region 4단계 흡혈 및 QTE 연산
 
     private void OnSuckStarted(InputAction.CallbackContext context)
     {
-        if (isDead || currentState != MosquitoState.Feeding) return;
+        if (isDead || currentState != MosquitoState.Sucking) return;
 
-        isSucking = true;
         UpdateAnimationState();
         Debug.Log("<color=red>[흡혈 중...] 좌클릭 홀드: 피를 빨기 시작합니다!</color>");
     }
 
     private void OnSuckCanceled(InputAction.CallbackContext context)
     {
-        if (isDead || currentState != MosquitoState.Feeding) return;
+        if (isDead || currentState != MosquitoState.Sucking) return;
 
-        isSucking = false;
         UpdateAnimationState();
-        Debug.Log("<color=yellow>[흡혈 중단] 좌클릭 해제: 흡혈을 일시 멈춥니다.</color>");
+        Debug.Log("<color=yellow>[흡혈 일시정지] 좌클릭 해제: 빨대를 꽂은 채 멈춥니다.</color>");
     }
 
-    private void StartFeedingSequence()
+    /// <summary>
+    /// QTE 성공 시 진입하는 4단계(Sucking) 시퀀스
+    /// </summary>
+    private void StartSuckingSequence()
     {
         if (isDead) return;
 
-        currentState = MosquitoState.Feeding;
+        currentState = MosquitoState.Sucking;
         feedingTimer = 0f;
-        isSucking = false;
 
-        SwitchActionMapSafely("Feeding");
+        SwitchActionMapSafely("Feeding"); // 인풋 액션맵 유지
         UpdateAnimationState();
 
-        Debug.Log("<color=green>[안착 완료] 좌클릭을 꾹 눌러 피를 빠세요!</color>");
+        Debug.Log("<color=green>[흡혈 준비 완료] 좌클릭을 꾹 눌러 피를 빠세요!</color>");
     }
 
     private void ProcessBloodSucking()
     {
         if (currentBlood < maxBlood)
         {
-            // $B(t + \Delta t) = \min(B_{\max}, B(t) + R_{\text{suck}} \cdot \Delta t)$
             currentBlood += suckRate * Time.deltaTime;
             currentBlood = Mathf.Min(currentBlood, maxBlood);
 
@@ -212,15 +201,14 @@ public class MosquitoController : MonoBehaviour
 
             if (Mathf.Approximately(currentBlood, maxBlood))
             {
-                OnFeedingCompleted();
+                OnSuckingCompleted();
             }
         }
     }
 
-    private void OnFeedingCompleted()
+    private void OnSuckingCompleted()
     {
         Debug.Log("<color=cyan>[흡혈 완수!] 피를 최대로 채워 자동으로 이륙합니다.</color>");
-        isSucking = false;
         currentState = MosquitoState.Flying;
 
         SwitchActionMapSafely("Flying");
@@ -254,7 +242,7 @@ public class MosquitoController : MonoBehaviour
         }
     }
 
-    private void EvaluateFeedingDangerAttack()
+    private void EvaluateSuckingDangerAttack()
     {
         feedingTimer += Time.deltaTime;
         if (feedingTimer < feedingCheckInterval) return;
@@ -262,7 +250,8 @@ public class MosquitoController : MonoBehaviour
 
         float angerMult = HumanAngerManager.Instance != null ? HumanAngerManager.Instance.CurrentAngerMultiplier : 1f;
 
-        float suckRiskMultiplier = isSucking ? 2.0f : 0.5f;
+        // 좌클릭으로 흡혈 중일 때 사람이 눈치챌 확률이 배가 됨
+        float suckRiskMultiplier = (suckAction != null && suckAction.IsPressed()) ? 2.0f : 0.5f;
         float attackProb = currentZoneDangerRatio * angerMult * 0.3f * suckRiskMultiplier;
 
         if (UnityEngine.Random.value <= attackProb)
@@ -272,62 +261,47 @@ public class MosquitoController : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// HumanAngerManager에서 손바닥 타격 성공 시 호출되는 피격/사망/게임오버 처리 함수
-    /// </summary>
     public void OnHitByHumanHand()
     {
         if (isDead) return;
 
         isDead = true;
         currentState = MosquitoState.Dead;
-        isSucking = false;
 
-        // 1. 모든 코루틴 즉시 중단
         StopAllCoroutines();
 
-        // 2. 물리적 이동 완전 정지 ($\vec{v} = \vec{0}$)
         if (rb != null)
         {
             rb.linearVelocity = Vector2.zero;
             rb.angularVelocity = 0f;
-            rb.simulated = false; // 물리 연산 비활성화
+            rb.simulated = false;
         }
 
-        // 3. 플레이어 입력 차단
         if (playerInput != null)
         {
             playerInput.enabled = false;
         }
 
-        // 4. 애니메이션 상태 갱신
         UpdateAnimationState();
 
-        // 5. 게임오버 로그 출력
         Debug.LogError("<color=red>========================================</color>");
         Debug.LogError("<color=red>[GAME OVER] 모기가 사람 손바닥에 짓눌려 사망했습니다!</color>");
         Debug.LogError("<color=red>========================================</color>");
 
-        // 6. 사람의 분노 수치 및 스택 초기화
         if (HumanAngerManager.Instance != null)
         {
             HumanAngerManager.Instance.ResetAnger();
         }
 
-        // 7. 게임오버 브로드캐스트 이벤트 발행 (결과창 UI 구독용)
         OnGameOver?.Invoke();
     }
 
-    /// <summary>
-    /// [개발용 테스트 / 부활 함수] 필요 시 호출하여 플레이어를 다시 세팅
-    /// </summary>
     public void RespawnMosquito(Vector3 spawnPosition)
     {
         isDead = false;
         currentState = MosquitoState.Flying;
         transform.position = spawnPosition;
         currentBlood = 0f;
-        isSucking = false;
 
         if (rb != null)
         {
@@ -368,8 +342,6 @@ public class MosquitoController : MonoBehaviour
         if (zone != null)
         {
             currentZoneDangerRatio = zone.DangerProbability;
-
-            // 곧바로 스킬체크로 가지 않고, 먼저 '안착(Landing)' 상태를 거칩니다!
             StartLandingSequence(hit, currentZoneDangerRatio);
         }
     }
@@ -378,26 +350,25 @@ public class MosquitoController : MonoBehaviour
     {
         if (isDead) return;
 
+        // 2단계: Landing 상태 진입
         currentState = MosquitoState.Landing;
         transform.position = skin.ClosestPoint(transform.position);
 
         SwitchActionMapSafely("SkillCheck");
         UpdateAnimationState();
 
-        // 안착 모션이 재생될 시간을 잠깐 준 뒤(예: 0.3초 후) QTE 스킬체크 UI를 띄웁니다.
-        // 코루틴을 활용하면 안착 애니메이션과 QTE를 완벽하게 연동할 수 있습니다!
         StartCoroutine(WaitLandingAnimationRoutine(dangerRatio));
     }
 
     private IEnumerator WaitLandingAnimationRoutine(float dangerRatio)
     {
-        // 안착 애니메이션이 재생되는 동안 대기 (필요한 시간만큼 조절 가능)
+        // 안착 모션이 재생될 시간 동안 대기
         yield return new WaitForSeconds(0.3f);
 
         if (isDead) yield break;
 
-        // 안착이 끝났으니 본격적인 QTE 스킬체크 상태로 전환
-        currentState = MosquitoState.SkillChecking;
+        // 3단계: Checking(QTE) 상태로 전환
+        currentState = MosquitoState.Checking;
         currentSkillCheckCount = 0;
         UpdateAnimationState();
 
@@ -413,7 +384,7 @@ public class MosquitoController : MonoBehaviour
 
         if (result == SkillCheckUI.SkillCheckResult.GreatSuccess)
         {
-            StartFeedingSequence();
+            StartSuckingSequence(); // 성공 시 4단계(Sucking)로 직행
         }
         else if (result == SkillCheckUI.SkillCheckResult.Success)
         {
@@ -421,14 +392,14 @@ public class MosquitoController : MonoBehaviour
 
             if (currentSkillCheckCount >= requiredSkillChecks)
             {
-                StartFeedingSequence();
+                StartSuckingSequence(); // 요구 횟수 채우면 4단계(Sucking)로 진입
             }
             else
             {
                 SkillCheckUI.Instance.BeginSkillCheck(1.3f, OnDbdSkillCheckCompleted);
             }
         }
-        else // Fail (QTE 실패 시 손바닥 공격 트리거)
+        else // Fail (QTE 실패 시 손바닥 공격 및 비행으로 복귀)
         {
             HumanAngerManager.Instance?.TriggerAttack(transform.position);
 
@@ -442,7 +413,7 @@ public class MosquitoController : MonoBehaviour
     {
         if (isDead) return;
 
-        if (currentState == MosquitoState.SkillChecking && SkillCheckUI.Instance != null)
+        if (currentState == MosquitoState.Checking && SkillCheckUI.Instance != null)
             SkillCheckUI.Instance.OnInputPressed();
     }
 
@@ -450,12 +421,12 @@ public class MosquitoController : MonoBehaviour
     {
         if (isDead) return;
 
-        if (currentState == MosquitoState.Feeding)
+        if (currentState == MosquitoState.Sucking || currentState == MosquitoState.Checking)
         {
-            isSucking = false;
             currentState = MosquitoState.Flying;
             SwitchActionMapSafely("Flying");
             UpdateAnimationState();
+            Debug.Log("<color=yellow>[강제 이륙] 플레이어가 수동으로 이륙했습니다.</color>");
         }
     }
 
@@ -463,12 +434,14 @@ public class MosquitoController : MonoBehaviour
     {
         if (animator == null) return;
 
-        // 각 상태가 오직 하나의 불리언만 정확히 제어하도록 1대1 매핑
+        // 4가지 핵심 상태와 애니메이터 불리언 파라미터를 1대1로 정확히 동기화
         animator.SetBool(HashIsFlying, currentState == MosquitoState.Flying);
-        animator.SetBool(HashIsLanding, currentState == MosquitoState.Landing);       // 오직 안착 상태일 때만!
-        animator.SetBool(HashIsChecking, currentState == MosquitoState.SkillChecking); // 오직 QTE 체크 중일 때만!
-        animator.SetBool(HashIsFeeding, currentState == MosquitoState.Feeding);
-        animator.SetBool(HashIsSucking, isSucking);
+        animator.SetBool(HashIsLanding, currentState == MosquitoState.Landing);
+        animator.SetBool(HashIsChecking, currentState == MosquitoState.Checking);
+
+        // Sucking 상태이면서 실제 좌클릭을 누르고 있을 때만 IsSucking 애니메이션 불이 들어오도록 처리
+        bool isHoldingSuck = (currentState == MosquitoState.Sucking && suckAction != null && suckAction.IsPressed());
+        animator.SetBool(HashIsSucking, isHoldingSuck);
     }
 
     private void SwitchActionMapSafely(string mapName)
