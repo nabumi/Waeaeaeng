@@ -26,6 +26,11 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    private void Start()
+    {
+        AudioManager.Instance.PlayInGameBGM();
+    }
+
     private void OnEnable()
     {
         // MosquitoController 사망 이벤트 구독

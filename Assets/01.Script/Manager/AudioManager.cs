@@ -5,7 +5,7 @@ using UnityEngine.SceneManagement;
 
 /// <summary>
 /// 게임 전역 BGM, SFX, 모기 날갯짓 사운드를 통합 관리하는 싱글톤 오디오 매니저
-/// (씬 내 수동 배치가 없어도 호출 시 자동 인스턴스화 및 오디오 에셋 자동 바인딩 지원)
+/// (Resources.Load 기반 100% 보장 로드 및 씬 진입 시 BGM 자동 재생 지원)
 /// </summary>
 public class AudioManager : MonoBehaviour
 {
@@ -21,9 +21,19 @@ public class AudioManager : MonoBehaviour
                 {
                     var go = new GameObject("[AudioManager]");
                     instance = go.AddComponent<AudioManager>();
+                    DontDestroyOnLoad(go);
                 }
             }
             return instance;
+        }
+    }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void AutoInitialize()
+    {
+        if (instance == null)
+        {
+            var inst = Instance; // 인스턴스 자동 생성
         }
     }
 
@@ -58,7 +68,7 @@ public class AudioManager : MonoBehaviour
 
     [Header("볼륨 설정")]
     [Range(0f, 1f)][SerializeField] private float masterVolume = 1.0f;
-    [Range(0f, 1f)][SerializeField] private float bgmVolume = 0.6f;
+    [Range(0f, 1f)][SerializeField] private float bgmVolume = 0.7f;
     [Range(0f, 1f)][SerializeField] private float sfxVolume = 1.0f;
 
     private readonly Dictionary<SFXType, AudioClip> sfxClipMap = new Dictionary<SFXType, AudioClip>();
@@ -70,8 +80,13 @@ public class AudioManager : MonoBehaviour
             instance = this;
             DontDestroyOnLoad(gameObject);
             InitializeAudioSources();
-            AutoBindAudioClips();
+            LoadAudioClipsFromResources();
             RegisterClips();
+
+            if (AudioListener.volume <= 0.001f)
+            {
+                AudioListener.volume = 1.0f;
+            }
         }
         else if (instance != this)
         {
@@ -80,11 +95,33 @@ public class AudioManager : MonoBehaviour
         }
     }
 
+    private void OnEnable()
+    {
+        SceneManager.sceneLoaded += OnSceneLoaded;
+    }
+
+    private void OnDisable()
+    {
+        SceneManager.sceneLoaded -= OnSceneLoaded;
+    }
+
     private void Start()
     {
-        // 현재 씬이 인게임 씬이면 인게임 BGM 자동 재생
-        string currentScene = SceneManager.GetActiveScene().name;
-        if (currentScene.IndexOf("Ingame", StringComparison.OrdinalIgnoreCase) >= 0)
+        CheckAndPlaySceneBGM(SceneManager.GetActiveScene().name);
+    }
+
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        CheckAndPlaySceneBGM(scene.name);
+    }
+
+    private void CheckAndPlaySceneBGM(string sceneName)
+    {
+        if (sceneName.IndexOf("Title", StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            PlayLobbyBGM();
+        }
+        else if (sceneName.IndexOf("Ingame", StringComparison.OrdinalIgnoreCase) >= 0)
         {
             PlayInGameBGM();
         }
@@ -97,6 +134,7 @@ public class AudioManager : MonoBehaviour
             bgmSource = gameObject.AddComponent<AudioSource>();
             bgmSource.loop = true;
             bgmSource.playOnAwake = false;
+            bgmSource.spatialBlend = 0f; // 2D 사운드
             bgmSource.volume = bgmVolume * masterVolume;
         }
 
@@ -105,6 +143,7 @@ public class AudioManager : MonoBehaviour
             sfxSource = gameObject.AddComponent<AudioSource>();
             sfxSource.loop = false;
             sfxSource.playOnAwake = false;
+            sfxSource.spatialBlend = 0f; // 2D 사운드
             sfxSource.volume = sfxVolume * masterVolume;
         }
 
@@ -113,51 +152,30 @@ public class AudioManager : MonoBehaviour
             mosquitoBuzzSource = gameObject.AddComponent<AudioSource>();
             mosquitoBuzzSource.loop = true;
             mosquitoBuzzSource.playOnAwake = false;
-            mosquitoBuzzSource.volume = 0.35f * sfxVolume * masterVolume;
+            mosquitoBuzzSource.spatialBlend = 0f; // 2D 사운드
+            mosquitoBuzzSource.volume = 0.4f * sfxVolume * masterVolume;
         }
     }
 
-    private void AutoBindAudioClips()
+    private void LoadAudioClipsFromResources()
     {
-        AudioClip[] allClips = Resources.FindObjectsOfTypeAll<AudioClip>();
-        var clipMap = new Dictionary<string, AudioClip>(StringComparer.OrdinalIgnoreCase);
+        // Resources/Audio 폴더에서 클립 로드
+        if (inGameBGM == null) inGameBGM = Resources.Load<AudioClip>("Audio/bgm_ingame");
+        if (lobbyBGM == null) lobbyBGM = Resources.Load<AudioClip>("Audio/lobbybgm");
+        if (slapClip == null) slapClip = Resources.Load<AudioClip>("Audio/alex_jauk-slap-237622");
+        if (qteSuccessClip == null) qteSuccessClip = Resources.Load<AudioClip>("Audio/sfx_qte_success");
+        if (qteGreatClip == null) qteGreatClip = Resources.Load<AudioClip>("Audio/sfx_qte_great");
+        if (qteFailClip == null) qteFailClip = Resources.Load<AudioClip>("Audio/sfx_qte_fail");
+        if (bloodSuckClip == null) bloodSuckClip = Resources.Load<AudioClip>("Audio/sfx_blood_suck");
+        if (gameOverClip == null) gameOverClip = Resources.Load<AudioClip>("Audio/sfx_gameover");
+        if (mosquitoBuzzClip == null) mosquitoBuzzClip = Resources.Load<AudioClip>("Audio/freesound_community-single-mosquito-buzz-69360");
 
-        foreach (var c in allClips)
-        {
-            if (c != null && !clipMap.ContainsKey(c.name))
-            {
-                clipMap[c.name] = c;
-            }
-        }
-
-        AudioClip FindClip(params string[] candidateNames)
-        {
-            foreach (var name in candidateNames)
-            {
-                foreach (var kvp in clipMap)
-                {
-                    if (kvp.Key.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        return kvp.Value;
-                    }
-                }
-            }
-            return null;
-        }
-
-        if (inGameBGM == null) inGameBGM = FindClip("bgm_ingame", "lobbybgm");
-        if (lobbyBGM == null) lobbyBGM = FindClip("lobbybgm");
-        if (slapClip == null) slapClip = FindClip("alex_jauk-slap", "slap");
-        if (qteSuccessClip == null) qteSuccessClip = FindClip("sfx_qte_success");
-        if (qteGreatClip == null) qteGreatClip = FindClip("sfx_qte_great");
-        if (qteFailClip == null) qteFailClip = FindClip("sfx_qte_fail");
-        if (bloodSuckClip == null) bloodSuckClip = FindClip("sfx_blood_suck");
-        if (gameOverClip == null) gameOverClip = FindClip("sfx_gameover");
-        if (mosquitoBuzzClip == null) mosquitoBuzzClip = FindClip("freesound_community-single-mosquito-buzz", "lobbymoskito");
+        Debug.Log($"<color=green>[AudioManager] 오디오 클립 로드 완료 -> BGM: {(inGameBGM != null ? inGameBGM.name : "null")}, Slap: {(slapClip != null ? slapClip.name : "null")}, Buzz: {(mosquitoBuzzClip != null ? mosquitoBuzzClip.name : "null")}</color>");
     }
 
     private void RegisterClips()
     {
+        sfxClipMap.Clear();
         if (slapClip != null) sfxClipMap[SFXType.Slap] = slapClip;
         if (qteSuccessClip != null) sfxClipMap[SFXType.QteSuccess] = qteSuccessClip;
         if (qteGreatClip != null) sfxClipMap[SFXType.QteGreat] = qteGreatClip;
@@ -174,8 +192,10 @@ public class AudioManager : MonoBehaviour
 
         bgmSource.clip = clip;
         bgmSource.loop = loop;
+        bgmSource.spatialBlend = 0f;
         bgmSource.volume = bgmVolume * masterVolume;
         bgmSource.Play();
+        Debug.Log($"<color=cyan>[AudioManager] BGM 재생 시작: {clip.name}</color>");
     }
 
     public void StopBGM()
@@ -186,6 +206,7 @@ public class AudioManager : MonoBehaviour
     public void PlayInGameBGM()
     {
         if (inGameBGM != null) PlayBGM(inGameBGM);
+        else Debug.LogWarning("[AudioManager] inGameBGM 클립이 비어있습니다!");
     }
 
     public void PlayLobbyBGM()
@@ -199,6 +220,10 @@ public class AudioManager : MonoBehaviour
         {
             PlaySFX(clip, volumeMultiplier, pitch);
         }
+        else
+        {
+            Debug.LogWarning($"[AudioManager] SFXType '{type}'에 해당하는 오디오 클립이 없습니다.");
+        }
     }
 
     public void PlaySFX(AudioClip clip, float volumeMultiplier = 1.0f, float pitch = 1.0f)
@@ -206,10 +231,11 @@ public class AudioManager : MonoBehaviour
         if (clip == null || sfxSource == null) return;
 
         sfxSource.pitch = pitch;
+        sfxSource.spatialBlend = 0f;
         sfxSource.PlayOneShot(clip, sfxVolume * masterVolume * volumeMultiplier);
     }
 
-    public void StartMosquitoBuzz(float volume = 0.35f)
+    public void StartMosquitoBuzz(float volume = 0.4f)
     {
         if (mosquitoBuzzSource == null) return;
         if (mosquitoBuzzClip != null && mosquitoBuzzSource.clip != mosquitoBuzzClip)
@@ -219,8 +245,10 @@ public class AudioManager : MonoBehaviour
 
         if (!mosquitoBuzzSource.isPlaying && mosquitoBuzzSource.clip != null)
         {
+            mosquitoBuzzSource.spatialBlend = 0f;
             mosquitoBuzzSource.volume = volume * sfxVolume * masterVolume;
             mosquitoBuzzSource.Play();
+            Debug.Log("<color=cyan>[AudioManager] 모기 날갯짓 루프 재생 시작</color>");
         }
     }
 
