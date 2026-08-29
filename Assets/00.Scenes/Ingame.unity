@@ -1310,7 +1310,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 449}
+  m_AnchoredPosition: {x: -762, y: 459.1}
   m_SizeDelta: {x: 400, y: 200}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &623477121
@@ -1506,11 +1506,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MosquitoController
   currentState: 0
   isDead: 0
-  moveSpeed: 10
+  baseMoveSpeed: 5
   hoverAmplitude: 1
   hoverFrequency: 1
   dashSpeedMultiplier: 2.6
   dashDuration: 0.16
+  slowTimeScale: 0.2
   dashCooldown: 0.7
   humanSkinLayer:
     serializedVersion: 2
@@ -1521,6 +1522,15 @@ MonoBehaviour:
   maxBlood: 100
   currentBlood: 0
   suckRate: 20
+  speedDebuffPerLevel: 0.15
+  tailTransform: {fileID: 0}
+  bodyGaugeRenderer: {fileID: 0}
+  tailGrowthThresholds: 050000000f0000001e000000
+  tailScaleLevels:
+  - {x: 1, y: 1, z: 1}
+  - {x: 1.3, y: 1.3, z: 1}
+  - {x: 1.6, y: 1.6, z: 1}
+  - {x: 2, y: 2, z: 1}
   feedingCheckInterval: 1.5
   deathSprite: {fileID: 0}
 --- !u!50 &636591782
@@ -1969,8 +1979,8 @@ RectTransform:
   - {fileID: 1521900386}
   - {fileID: 1040603758}
   - {fileID: 1882517945}
-  - {fileID: 989850887}
   - {fileID: 623477120}
+  - {fileID: 989850887}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -2721,7 +2731,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 300.4, y: -50}
+  m_AnchoredPosition: {x: 103.8, y: -206.5}
   m_SizeDelta: {x: 200, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &989850888
