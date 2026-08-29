@@ -1509,10 +1509,10 @@ MonoBehaviour:
   baseMoveSpeed: 5
   hoverAmplitude: 1
   hoverFrequency: 1
-  dashSpeedMultiplier: 2.6
-  dashDuration: 0.16
+  dashSpeedMultiplier: 2.8
+  dashDuration: 0.35
   slowTimeScale: 0.2
-  dashCooldown: 0.7
+  dashCooldown: 0.8
   humanSkinLayer:
     serializedVersion: 2
     m_Bits: 8
