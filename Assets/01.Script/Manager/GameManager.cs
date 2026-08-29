@@ -1,20 +1,27 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using UnityEngine.InputSystem; // [핵심] New Input System 네임스페이스 추가!
+using UnityEngine.InputSystem;
 
 /// <summary>
-/// 전역 게임 상태 관리 및 씬 리셋을 전담하는 매니저 클래스 (New Input System 대응)
+/// 게임 전역 상태(진행 중, 게임 오버, 게임 클리어) 및 씬 전환을 관리하는 매니저
 /// </summary>
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance { get; private set; }
 
+    public enum GameState
+    {
+        Playing,
+        GameOver,
+        GameClear
+    }
+
     [Header("게임 상태")]
-    [SerializeField] private bool isGameOver = false;
+    [SerializeField] private GameState currentState = GameState.Playing;
+    public GameState CurrentState => currentState;
 
     private void Awake()
     {
-        // 싱글톤 패턴 적용 (인스턴스 유일성 보장)
         if (Instance == null)
         {
             Instance = this;
@@ -25,51 +32,78 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        // 씬 내 gameover UI 오브젝트에 GameOverUIController 자동 바인딩
-        if (GameOverUIController.Instance == null)
-        {
-            var canvas = FindAnyObjectByType<Canvas>();
-            GameObject gameoverObj = null;
-            if (canvas != null)
-            {
-                var t = canvas.transform.Find("gameover");
-                if (t != null) gameoverObj = t.gameObject;
-            }
-            if (gameoverObj == null)
-            {
-                gameoverObj = GameObject.Find("gameover");
-            }
-
-            if (gameoverObj != null && gameoverObj.GetComponent<GameOverUIController>() == null)
-            {
-                gameoverObj.AddComponent<GameOverUIController>();
-            }
-        }
+        EnsureUIControllers();
     }
 
     private void Start()
     {
         AudioManager.Instance?.PlayInGameBGM();
+        EnsureUIControllers();
     }
 
     private void OnEnable()
     {
-        // MosquitoController 사망 이벤트 구독
         MosquitoController.OnGameOver += OnGameOverTriggered;
+        EscapeSystem.OnGameClear += OnGameClearTriggered;
     }
 
     private void OnDisable()
     {
-        // 메모리 누수 방지를 위한 이벤트 구독 해제
         MosquitoController.OnGameOver -= OnGameOverTriggered;
+        EscapeSystem.OnGameClear -= OnGameClearTriggered;
+    }
+
+    private void EnsureUIControllers()
+    {
+        // 1. gameover 오브젝트 찾아서 GameOverUIController 부착 및 시작 시 비활성화 보장
+        var allCanvases = Resources.FindObjectsOfTypeAll<Canvas>();
+        GameObject gameoverObj = null;
+
+        foreach (var canvas in allCanvases)
+        {
+            var t = canvas.transform.Find("gameover");
+            if (t != null)
+            {
+                gameoverObj = t.gameObject;
+                break;
+            }
+        }
+
+        if (gameoverObj == null)
+        {
+            var allTransforms = Resources.FindObjectsOfTypeAll<Transform>();
+            foreach (var t in allTransforms)
+            {
+                if (t.name.Equals("gameover", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    gameoverObj = t.gameObject;
+                    break;
+                }
+            }
+        }
+
+        if (gameoverObj != null)
+        {
+            if (gameoverObj.GetComponent<GameOverUIController>() == null)
+            {
+                gameoverObj.AddComponent<GameOverUIController>();
+            }
+
+            // 게임 시작 시 무조건 비활성화!
+            if (currentState == GameState.Playing)
+            {
+                var canvas = gameoverObj.GetComponent<Canvas>();
+                if (canvas != null) canvas.enabled = false;
+                gameoverObj.SetActive(false);
+            }
+        }
     }
 
     private void Update()
     {
-        // 게임오버 상태일 때 R키 입력 감지
-        if (isGameOver)
+        // 게임오버나 클리어 상태일 때 R키로 빠른 재시작 지원
+        if (currentState != GameState.Playing)
         {
-            // [핵심 해결] New Input System 전용 키보드 직접 감지 API 사용!
             if (Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame)
             {
                 RestartCurrentScene();
@@ -78,54 +112,75 @@ public class GameManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 모기 사망 이벤트 수신 시 실행되는 콜백 함수
+    /// 모기 사망 이벤트 수신
     /// </summary>
     private void OnGameOverTriggered()
     {
-        isGameOver = true;
+        if (currentState != GameState.Playing) return;
+        currentState = GameState.GameOver;
 
-        Debug.LogWarning("<color=yellow>==================================================</color>");
-        Debug.LogWarning("<color=yellow>[GAME OVER] 모기 사망 수신 -> 게임오버 결과창 활성화 ('R' 키 재시작 가능)</color>");
-        Debug.LogWarning("<color=yellow>==================================================</color>");
+        Debug.LogWarning("<color=yellow>[GameManager] GAME OVER 트리거 -> 결과창 활성화</color>");
 
-        // 씬 내 gameover UI 오브젝트를 찾아 활성화 및 페이드인
-        GameObject gameoverObj = null;
-        var canvas = FindAnyObjectByType<Canvas>();
-        if (canvas != null)
+        EnsureUIControllers();
+
+        if (GameOverUIController.Instance != null)
         {
-            var t = canvas.transform.Find("gameover");
-            if (t != null) gameoverObj = t.gameObject;
-        }
-        if (gameoverObj == null)
-        {
-            gameoverObj = GameObject.Find("gameover");
-        }
-
-        if (gameoverObj != null)
-        {
-            gameoverObj.SetActive(true);
-            gameoverObj.transform.SetAsLastSibling();
-
-            var controller = gameoverObj.GetComponent<GameOverUIController>() ?? gameoverObj.AddComponent<GameOverUIController>();
-            controller.ShowGameOverUI();
+            GameOverUIController.Instance.ShowGameOverUI();
         }
         else
         {
-            Debug.LogError("<color=red>[GameManager] 씬에서 'gameover' UI 오브젝트를 찾을 수 없습니다!</color>");
+            var allTransforms = Resources.FindObjectsOfTypeAll<Transform>();
+            foreach (var t in allTransforms)
+            {
+                if (t.name.Equals("gameover", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    t.gameObject.SetActive(true);
+                    var ctrl = t.GetComponent<GameOverUIController>() ?? t.gameObject.AddComponent<GameOverUIController>();
+                    ctrl.ShowGameOverUI();
+                    break;
+                }
+            }
         }
     }
 
     /// <summary>
-    /// 현재 활성화된 씬을 다시 로드하여 모든 상태를 완벽 초기화합니다.
+    /// 모기 탈출 성공/승리 이벤트 수신
+    /// </summary>
+    private void OnGameClearTriggered()
+    {
+        if (currentState != GameState.Playing) return;
+        currentState = GameState.GameClear;
+
+        Debug.LogWarning("<color=green>[GameManager] GAME CLEAR 트리거 -> 승리 결과창 활성화</color>");
+
+        EnsureUIControllers();
+
+        if (GameOverUIController.Instance != null)
+        {
+            GameOverUIController.Instance.ShowGameClearUI();
+        }
+        else
+        {
+            var allTransforms = Resources.FindObjectsOfTypeAll<Transform>();
+            foreach (var t in allTransforms)
+            {
+                if (t.name.Equals("gameover", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    t.gameObject.SetActive(true);
+                    var ctrl = t.GetComponent<GameOverUIController>() ?? t.gameObject.AddComponent<GameOverUIController>();
+                    ctrl.ShowGameClearUI();
+                    break;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 현재 씬 재로드
     /// </summary>
     public void RestartCurrentScene()
     {
-        Debug.Log("<color=green>[System] R키 입력 수신: 씬을 다시 로드합니다...</color>");
-
-        // Time.timeScale 일시정지 상태 해제
         Time.timeScale = 1.0f;
-
-        // 현재 active 씬의 이름을 추출하여 재로드
         string currentSceneName = SceneManager.GetActiveScene().name;
         SceneManager.LoadScene(currentSceneName);
     }

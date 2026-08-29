@@ -4,22 +4,22 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 /// <summary>
-/// 모기의 현재 행동 상태 정의 (4단계 핵심 루프 + 사망)
+/// 모기의 행동 상태 정의 (비행, 안착, 스킬체크, 흡혈, 사망)
 /// </summary>
 public enum MosquitoState
 {
     Flying,     // 1단계: 공중 비행 및 이동
-    Landing,    // 2단계: 피부에 척 달라붙는 안착 모션
-    Checking,   // 3단계: 빨대를 꽂고 QTE 스킬체크 진행
-    Sucking,    // 4단계: 좌클릭을 꾹 눌러 피를 빠는 상태
-    Dead        // 5단계: 사망 (게임 오버)
+    Landing,    // 2단계: 피부 안착 모션
+    Checking,   // 3단계: QTE 스킬체크 진행
+    Sucking,    // 4단계: 흡혈 진행
+    Dead        // 5단계: 사망
 }
 
 [RequireComponent(typeof(Rigidbody2D), typeof(PlayerInput))]
 public class MosquitoController : MonoBehaviour
 {
     // =========================================================================
-    // [이벤트 시스템] 결과창 UI 및 외부 매니저 구독용
+    // [이벤트 시스템]
     // =========================================================================
     public static event Action OnGameOver;
     public event Action<float, float> OnBloodAmountChanged; // (현재 피, 최대 피)
@@ -33,68 +33,51 @@ public class MosquitoController : MonoBehaviour
     [SerializeField] private float hoverAmplitude = 0.15f;
     [SerializeField] private float hoverFrequency = 4f;
 
-    [Header("대시 및 회피(불릿 타임) 설정")]
-    [Tooltip("대시 상태일 때 이동 속도 배율")]
+    [Header("혈액 생존 및 소모 설정 (Energy Drain)")]
+    [Tooltip("비행 중 초당 혈액 자연 소모량 (ml/s)")]
+    [SerializeField] private float flightBloodDrainRate = 1.5f;
+
+    [Tooltip("대시 사용 시 1회 혈액 소모량 (ml)")]
+    [SerializeField] private float dashBloodCost = 5.0f;
+
+    [Header("대시 및 불릿 타임 설정")]
     [SerializeField] private float dashSpeedMultiplier = 2.8f;
-    [Tooltip("대시 및 슬로우모션 유지 시간 (실시간 초 기준)")]
     [SerializeField] private float dashDuration = 0.35f;
-    [Tooltip("대시 시 적용할 주변 시간 속도 (0.2 = 주변 시간이 5배 느려짐)")]
     [SerializeField] private float slowTimeScale = 0.2f;
-    [Tooltip("대시 스킬 쿨타임 (실시간 초 기준)")]
     [SerializeField] private float dashCooldown = 0.8f;
 
     private bool isDashing = false;
     public bool IsDashing => isDashing;
     private float lastDashTime = -999f;
     private Vector2 currentDashDirection = Vector2.right;
-    private Vector2 lastNonZeroMoveDirection = Vector2.right;
 
-    [Header("피부 안착 감지 설정")]
+    [Header("피부 안착 및 위험도 설정")]
     [SerializeField] private LayerMask humanSkinLayer;
     [SerializeField] private float landingRadius = 0.8f;
+    [SerializeField] private float checkInterval = 1.0f;
+    private float attackCheckTimer = 0f;
+    private float currentZoneDangerRatio = 0f;
 
-    [Header("공중 체류 공격 감지 설정")]
-    [SerializeField] private float lingerCheckInterval = 1.0f;
-    private float lingerTimer = 0f;
-
-    [Header("스킬 체크 & 흡혈 기본 설정")]
+    [Header("스킬 체크 & 흡혈 설정")]
     [SerializeField] private int requiredSkillChecks = 2;
     private int currentSkillCheckCount = 0;
 
-    [SerializeField] private float maxBlood = 100f;
-    [SerializeField] private float currentBlood = 0f;
+    [SerializeField] private float maxBlood = 200f;
+    [SerializeField] private float escapeThreshold = 150f;
+    [SerializeField] private float currentBlood = 40f;
     [SerializeField] private float suckRate = 25f; // 초당 흡혈 속도
 
-    [Header("구역별 흡혈 세션 트래킹")]
-    private BitingZone currentBitingZone; // 현재 안착해 있는 구역
-    private float currentZoneMaxSuckAmount = 0f; // 해당 구역에서 빨 수 있는 최대 피
-    private float currentZoneSuckedBlood = 0f;   // 이번 안착 세션에서 빤 피의 양
+    [Header("구역별 세션 트래킹")]
+    private BitingZone currentBitingZone;
+    private float currentZoneMaxSuckAmount = 0f;
+    private float currentZoneSuckedBlood = 0f;
 
-    [Header("꼬리 비대화 & 이동속도 디버프 설정")]
-    [SerializeField] private float speedDebuffPerLevel = 0.15f; // 단계당 15% 감속
-    [SerializeField] private Transform tailTransform;          // 꼬리 Transform
-    [SerializeField] private SpriteRenderer bodyGaugeRenderer; // 피 게이지 SpriteRenderer
+    [Header("이동속도 디버프 설정")]
+    [SerializeField] private float speedDebuffPerLevel = 0.1f;
+    private float effectiveMoveSpeed;
+    private float playStartTime = 0f;
 
-    // 꼬리 성장 기준 피 수치 (1단계: 5, 2단계: 15, 3단계: 30 이상 누적 시)
-    [SerializeField] private int[] tailGrowthThresholds = new int[3] { 5, 15, 30 };
-    [SerializeField]
-    private Vector3[] tailScaleLevels = new Vector3[4]
-    {
-        new Vector3(1.0f, 1.0f, 1.0f), // 0단계 (기본)
-        new Vector3(1.3f, 1.3f, 1.0f), // 1단계 (5 이상)
-        new Vector3(1.6f, 1.6f, 1.0f), // 2단계 (15 이상)
-        new Vector3(2.0f, 2.0f, 1.0f)  // 3단계 (30 이상, 최대)
-    };
-
-    private int currentTailLevel = 0;
-    private float effectiveMoveSpeed; // 디버프가 적용된 실제 현재 속도
-
-    [Header("흡혈 중 기습 공격 타이머")]
-    [SerializeField] private float feedingCheckInterval = 1.0f;
-    private float feedingTimer = 0f;
-    private float currentZoneDangerRatio = 0f;
-
-    // 컴포넌트 및 액션 캐싱
+    // 컴포넌트 캐싱
     private Rigidbody2D rb;
     private PlayerInput playerInput;
     private Animator animator;
@@ -107,7 +90,7 @@ public class MosquitoController : MonoBehaviour
     private InputAction takeOffAction;
     private InputAction dashAction;
 
-    // 애니메이션 해시 캐싱 (GC 방지)
+    // 애니메이션 파라미터 해시
     private static readonly int HashIsFlying = Animator.StringToHash("IsFlying");
     private static readonly int HashIsLanding = Animator.StringToHash("IsLanding");
     private static readonly int HashIsChecking = Animator.StringToHash("IsChecking");
@@ -122,15 +105,8 @@ public class MosquitoController : MonoBehaviour
         spriteRenderer = GetComponentInChildren<SpriteRenderer>() ?? GetComponent<SpriteRenderer>();
         rb.gravityScale = 0f;
 
-        if (spriteRenderer != null)
-        {
-            spriteRenderer.sortingOrder = 10; // 물린 자국(Order 1) 위에 렌더링되어 가려지지 않음!
-        }
-
-        if (deathSprite == null)
-        {
-            deathSprite = Resources.Load<Sprite>("Sprites/Mosquito_death");
-        }
+        if (spriteRenderer != null) spriteRenderer.sortingOrder = 10;
+        if (deathSprite == null) deathSprite = Resources.Load<Sprite>("Sprites/Mosquito_death");
 
         if (playerInput != null && playerInput.actions != null)
         {
@@ -139,6 +115,10 @@ public class MosquitoController : MonoBehaviour
             takeOffAction = playerInput.actions.FindAction("TakeOff");
             dashAction = playerInput.actions.FindAction("Dash");
         }
+
+        if (currentBlood <= 0f) currentBlood = 40f;
+
+        EnsureBloodGauge();
     }
 
     private void OnEnable()
@@ -152,6 +132,8 @@ public class MosquitoController : MonoBehaviour
             suckAction.started += OnSuckStarted;
             suckAction.canceled += OnSuckCanceled;
         }
+
+        BloodManager.OnBloodDepleted += DieFromStarvation;
     }
 
     private void OnDisable()
@@ -166,14 +148,26 @@ public class MosquitoController : MonoBehaviour
             suckAction.canceled -= OnSuckCanceled;
         }
 
+        BloodManager.OnBloodDepleted -= DieFromStarvation;
         ResetTimeScale();
     }
 
     private void Start()
     {
+        playStartTime = Time.time;
+
+        if (BloodManager.Instance != null)
+        {
+            currentBlood = BloodManager.Instance.CurrentBlood > 0f ? BloodManager.Instance.CurrentBlood : 40f;
+            maxBlood = BloodManager.Instance.MaxTargetBlood > 0f ? BloodManager.Instance.MaxTargetBlood : 200f;
+        }
+        else
+        {
+            currentBlood = 40f;
+            maxBlood = 200f;
+        }
+
         CalculateEffectiveSpeed();
-        UpdateTailVisual();
-        UpdateBodyGauge();
 
         SwitchActionMapSafely("Flying");
         UpdateAnimationState();
@@ -196,13 +190,11 @@ public class MosquitoController : MonoBehaviour
         if (currentState == MosquitoState.Flying)
         {
             Vector2 targetVelocity = moveInput * effectiveMoveSpeed;
-
             if (moveInput == Vector2.zero)
             {
                 float hoverVy = hoverAmplitude * hoverFrequency * Mathf.Cos(Time.fixedTime * hoverFrequency);
                 targetVelocity.y = hoverVy;
             }
-
             rb.linearVelocity = targetVelocity;
         }
         else
@@ -215,20 +207,36 @@ public class MosquitoController : MonoBehaviour
     {
         if (isDead || currentState == MosquitoState.Dead) return;
 
+        // [F1 치트] 혈액 200ml 즉시 충전 & 탈출구 개방
+        if (Keyboard.current != null && Keyboard.current.f1Key.wasPressedThisFrame)
+        {
+            if (BloodManager.Instance != null)
+            {
+                BloodManager.Instance.SetBloodFullCheat();
+                currentBlood = BloodManager.Instance.CurrentBlood;
+            }
+            else
+            {
+                currentBlood = maxBlood;
+                OnBloodAmountChanged?.Invoke(currentBlood, maxBlood);
+                EscapeSystem.Instance?.ActivateRandomEscapeZone();
+            }
+            CalculateEffectiveSpeed();
+        }
+
         UpdateSpriteFacing();
 
         if (currentState == MosquitoState.Flying)
         {
+            DrainFlightBlood();
             HandleKeyboardDashCheck();
-            EvaluateFlyingLingerAttack();
+            EvaluateFlyingDanger();
         }
         else if (currentState == MosquitoState.Sucking)
         {
-            // 1. 흡혈 중 대쉬 키(Shift / 우클릭)를 누르면 즉시 바라보는 방향으로 탈출 대시!
             HandleKeyboardDashCheck();
             if (isDashing) return;
 
-            // 2. 흡혈 중 스페이스바 누르면 일반 이륙 탈출
             if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
             {
                 PerformTakeOff();
@@ -236,72 +244,65 @@ public class MosquitoController : MonoBehaviour
             }
 
             ProcessBloodSucking();
-            EvaluateSuckingDangerAttack();
+            EvaluateSuckingDanger();
         }
         else if (currentState == MosquitoState.Checking)
         {
-            // 스킬체크 중 스페이스바 입력은 스킬체크 판정 트리거
             if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
             {
-                if (SkillCheckUI.Instance != null)
-                {
-                    SkillCheckUI.Instance.OnInputPressed();
-                }
+                SkillCheckUI.Instance?.OnInputPressed();
             }
         }
     }
 
-    /// <summary>
-    /// 이동 입력 방향(X축)에 맞춰 모기 스프라이트 및 시각 요소를 좌우 반전합니다.
-    /// </summary>
+    private void DrainFlightBlood()
+    {
+        if (isDead || currentState != MosquitoState.Flying) return;
+        if (Time.time - playStartTime < 0.5f) return;
+
+        float drainAmount = flightBloodDrainRate * Time.deltaTime;
+        if (BloodManager.Instance != null)
+        {
+            BloodManager.Instance.ConsumeBlood(drainAmount);
+            currentBlood = BloodManager.Instance.CurrentBlood;
+        }
+        else
+        {
+            currentBlood = Mathf.Max(0f, currentBlood - drainAmount);
+            if (currentBlood <= 0f)
+            {
+                DieFromStarvation();
+                return;
+            }
+        }
+
+        OnBloodAmountChanged?.Invoke(currentBlood, maxBlood);
+        CalculateEffectiveSpeed();
+    }
+
     private void UpdateSpriteFacing()
     {
-        if (isDead || currentState == MosquitoState.Dead) return;
-
-        if (moveInput.x > 0.05f)
-        {
-            // 우측 이동: 스프라이트 기본 방향 (flipX = false)
-            if (spriteRenderer != null && spriteRenderer.flipX)
-            {
-                spriteRenderer.flipX = false;
-            }
-        }
-        else if (moveInput.x < -0.05f)
-        {
-            // 좌측 이동: 스프라이트 좌측 반전 (flipX = true)
-            if (spriteRenderer != null && !spriteRenderer.flipX)
-            {
-                spriteRenderer.flipX = true;
-            }
-        }
+        if (moveInput.x > 0.05f && spriteRenderer != null && spriteRenderer.flipX)
+            spriteRenderer.flipX = false;
+        else if (moveInput.x < -0.05f && spriteRenderer != null && !spriteRenderer.flipX)
+            spriteRenderer.flipX = true;
     }
 
     private void HandleKeyboardDashCheck()
     {
         if (isDashing) return;
 
-        bool dashTriggered = false;
-        if (Keyboard.current != null && (Keyboard.current.leftShiftKey.wasPressedThisFrame || Keyboard.current.rightShiftKey.wasPressedThisFrame))
-        {
-            dashTriggered = true;
-        }
-        else if (Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame)
-        {
-            dashTriggered = true;
-        }
+        bool dashTriggered = (Keyboard.current != null && (Keyboard.current.leftShiftKey.wasPressedThisFrame || Keyboard.current.rightShiftKey.wasPressedThisFrame)) ||
+                             (Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame);
 
-        if (dashTriggered)
-        {
-            PerformDash();
-        }
+        if (dashTriggered) PerformDash();
     }
 
-    #region 대시(Dash) 및 불릿 타임 시스템
+    #region 대시(Dash) 및 불릿 타임
 
     private void OnDashInputReceived(InputAction.CallbackContext context)
     {
-        if (!context.performed || isDead || isDashing) return;
-        if (currentState != MosquitoState.Flying && currentState != MosquitoState.Sucking) return;
+        if (!context.performed) return;
         PerformDash();
     }
 
@@ -311,9 +312,23 @@ public class MosquitoController : MonoBehaviour
         if (currentState != MosquitoState.Flying && currentState != MosquitoState.Sucking) return;
         if (Time.unscaledTime - lastDashTime < dashCooldown) return;
 
+        if (BloodManager.Instance != null)
+        {
+            BloodManager.Instance.ConsumeBlood(dashBloodCost);
+            currentBlood = BloodManager.Instance.CurrentBlood;
+        }
+        else
+        {
+            currentBlood = Mathf.Max(0f, currentBlood - dashBloodCost);
+            if (currentBlood <= 0f)
+            {
+                DieFromStarvation();
+                return;
+            }
+        }
+
         lastDashTime = Time.unscaledTime;
 
-        // 흡혈 도중 대시한 경우: 흉터를 남기고 즉시 비행 상태로 전환
         if (currentState == MosquitoState.Sucking)
         {
             FinishBiteSession();
@@ -322,37 +337,23 @@ public class MosquitoController : MonoBehaviour
             UpdateAnimationState();
         }
 
-        // 방향 결정: 이동 입력이 있으면 해당 방향, 없으면 현재 바라보는 방향(flipX 기준)
-        if (moveInput != Vector2.zero)
-        {
-            currentDashDirection = moveInput.normalized;
-        }
-        else
-        {
-            // 스프라이트가 왼쪽을 보고 있으면 Vector2.left, 오른쪽을 보고 있으면 Vector2.right
-            Vector2 facingDir = (spriteRenderer != null && spriteRenderer.flipX) ? Vector2.left : Vector2.right;
-            currentDashDirection = facingDir;
-        }
+        Vector2 facingDir = (spriteRenderer != null && spriteRenderer.flipX) ? Vector2.left : Vector2.right;
+        currentDashDirection = moveInput != Vector2.zero ? moveInput.normalized : facingDir;
 
-        lastNonZeroMoveDirection = currentDashDirection;
         StartCoroutine(DashRoutine());
     }
 
     private IEnumerator DashRoutine()
     {
         isDashing = true;
-
-        // 1. 주변 시간을 0.2배로 감속 (슬로우모션 발동)
         Time.timeScale = slowTimeScale;
         Time.fixedDeltaTime = 0.02f * Time.timeScale;
 
         AudioManager.Instance?.PlaySFX(AudioManager.SFXType.Dash);
         UpdateAnimationState();
 
-        // 2. 실시간 0.35초 동안 슬로우모션 대시 유지
         yield return new WaitForSecondsRealtime(dashDuration);
 
-        // 3. 정상 시간 복구
         isDashing = false;
         ResetTimeScale();
         UpdateAnimationState();
@@ -366,12 +367,11 @@ public class MosquitoController : MonoBehaviour
 
     #endregion
 
-    #region 4단계 흡혈 및 성장 연산
+    #region 흡혈 및 만복/탈출 연동
 
     private void OnSuckStarted(InputAction.CallbackContext context)
     {
         if (isDead || currentState != MosquitoState.Sucking) return;
-
         AudioManager.Instance?.PlaySFX(AudioManager.SFXType.BloodSuck);
         UpdateAnimationState();
     }
@@ -385,45 +385,57 @@ public class MosquitoController : MonoBehaviour
     private void StartSuckingSequence()
     {
         currentState = MosquitoState.Sucking;
-        currentZoneSuckedBlood = 0f; // 이번 세션 흡혈량 0으로 초기화
-
-        // [핵심 수정] 흡혈(Suck)과 이륙(TakeOff) 액션이 포함된 "Feeding" 액션 맵으로 전환!
+        currentZoneSuckedBlood = 0f;
         SwitchActionMapSafely("Feeding");
         UpdateAnimationState();
     }
 
     private void ProcessBloodSucking()
     {
-        // 1. New Input System 또는 마우스 좌클릭 직접 감지
         bool isSuckingHeld = (suckAction != null && suckAction.IsPressed()) ||
                              (Mouse.current != null && Mouse.current.leftButton.isPressed);
 
         if (isSuckingHeld)
         {
-            float previousBlood = currentBlood;
-            float suckDelta = suckRate * Time.deltaTime;
-
+            float requested = suckRate * Time.deltaTime;
             if (currentZoneMaxSuckAmount > 0f)
             {
                 float remainInZone = currentZoneMaxSuckAmount - currentZoneSuckedBlood;
-                suckDelta = Mathf.Min(suckDelta, remainInZone);
+                requested = Mathf.Min(requested, remainInZone);
             }
 
-            currentBlood = Mathf.Min(currentBlood + suckDelta, maxBlood);
-            currentZoneSuckedBlood += (currentBlood - previousBlood);
+            float actual = BloodManager.Instance != null ?
+                BloodManager.Instance.RequestSuckBlood(requested) :
+                Mathf.Min(requested, maxBlood - currentBlood);
+
+            if (BloodManager.Instance != null)
+            {
+                currentBlood = BloodManager.Instance.CurrentBlood;
+            }
+            else
+            {
+                currentBlood = Mathf.Min(currentBlood + actual, maxBlood);
+            }
+
+            currentZoneSuckedBlood += actual;
 
             OnBloodAmountChanged?.Invoke(currentBlood, maxBlood);
-            CheckTailGrowth();
-            UpdateBodyGauge();
+            CalculateEffectiveSpeed();
 
-            if (currentZoneMaxSuckAmount > 0f && currentZoneSuckedBlood >= currentZoneMaxSuckAmount)
+            // 1. 150ml 돌파 시 탈출 시스템 활성화
+            if (currentBlood >= escapeThreshold || (BloodManager.Instance != null && BloodManager.Instance.IsEscapeReady))
             {
-                Debug.Log("<color=orange>[구역 고갈] 이 부위의 피를 모두 빨았습니다! 자국을 남기고 강제 이륙합니다.</color>");
+                EscapeSystem.Instance?.ActivateRandomEscapeZone();
+            }
+
+            // 2. 최대 혈액(200ml) 도달 시 흡혈 완료 및 이륙
+            if (currentBlood >= maxBlood || (BloodManager.Instance != null && BloodManager.Instance.IsFull))
+            {
                 OnSuckingCompleted();
             }
-            else if (currentBlood >= maxBlood)
+            // 3. 구역 고갈 시 이륙
+            else if (currentZoneMaxSuckAmount > 0f && currentZoneSuckedBlood >= currentZoneMaxSuckAmount)
             {
-                Debug.Log("<color=green>[흡혈 완료] 최대 혈액량에 도달하여 비행 상태로 전환합니다.</color>");
                 OnSuckingCompleted();
             }
         }
@@ -432,7 +444,6 @@ public class MosquitoController : MonoBehaviour
     private void OnSuckingCompleted()
     {
         FinishBiteSession();
-
         currentState = MosquitoState.Flying;
         SwitchActionMapSafely("Flying");
         UpdateAnimationState();
@@ -447,87 +458,56 @@ public class MosquitoController : MonoBehaviour
         }
     }
 
-    private void CheckTailGrowth()
-    {
-        int newLevel = 0;
-
-        for (int i = 0; i < tailGrowthThresholds.Length; i++)
-        {
-            if (currentBlood >= tailGrowthThresholds[i])
-            {
-                newLevel = i + 1;
-            }
-        }
-
-        if (newLevel != currentTailLevel)
-        {
-            currentTailLevel = Mathf.Min(newLevel, 3);
-            UpdateTailVisual();
-            CalculateEffectiveSpeed();
-        }
-    }
-
-    private void UpdateTailVisual()
-    {
-        if (tailTransform != null && currentTailLevel < tailScaleLevels.Length)
-        {
-            tailTransform.localScale = tailScaleLevels[currentTailLevel];
-        }
-    }
-
-    private void UpdateBodyGauge()
-    {
-        if (bodyGaugeRenderer != null)
-        {
-            float fillRatio = Mathf.Clamp01(currentBlood / maxBlood);
-            bodyGaugeRenderer.color = new Color(1f, 0f, 0f, fillRatio);
-        }
-    }
-
     private void CalculateEffectiveSpeed()
     {
-        float debuffMultiplier = 1.0f - (currentTailLevel * speedDebuffPerLevel);
-        effectiveMoveSpeed = baseMoveSpeed * Mathf.Max(debuffMultiplier, 0.2f);
+        float bloodFillRatio = Mathf.Clamp01(currentBlood / maxBlood);
+        float debuffMultiplier = 1.0f - (bloodFillRatio * speedDebuffPerLevel * 3f);
+        effectiveMoveSpeed = baseMoveSpeed * Mathf.Max(debuffMultiplier, 0.4f);
+    }
+
+    private void EnsureBloodGauge()
+    {
+        if (GetComponentInChildren<MosquitoBloodGaugeUI>() == null)
+        {
+            var gaugeObj = new GameObject("MosquitoBloodGauge");
+            gaugeObj.transform.SetParent(transform, false);
+            gaugeObj.transform.localPosition = new Vector3(0f, 0.8f, 0f);
+            gaugeObj.AddComponent<MosquitoBloodGaugeUI>();
+        }
     }
 
     #endregion
 
-    #region 기습 공격 및 게임오버/리스폰 처리
+    #region 기습 공격 평가 & 사망/기아/리스폰 처리
 
-    private void EvaluateFlyingLingerAttack()
+    private void EvaluateFlyingDanger()
     {
-        lingerTimer += Time.deltaTime;
-        if (lingerTimer < lingerCheckInterval) return;
-        lingerTimer = 0f;
+        attackCheckTimer += Time.deltaTime;
+        if (attackCheckTimer < checkInterval) return;
+        attackCheckTimer = 0f;
 
         Collider2D hit = Physics2D.OverlapCircle(transform.position, landingRadius, humanSkinLayer);
-        if (hit != null)
+        if (hit != null && hit.TryGetComponent<IBodyPartZone>(out var zone))
         {
-            IBodyPartZone zone = hit.GetComponent<IBodyPartZone>() ?? hit.GetComponentInParent<IBodyPartZone>();
-            if (zone != null)
+            float angerMult = HumanAngerManager.Instance != null ? HumanAngerManager.Instance.CurrentAngerMultiplier : 1f;
+            if (UnityEngine.Random.value <= zone.DangerProbability * angerMult * 0.25f)
             {
-                float angerMult = HumanAngerManager.Instance != null ? HumanAngerManager.Instance.CurrentAngerMultiplier : 1f;
-                float attackProbability = zone.DangerProbability * angerMult * 0.25f;
-
-                if (UnityEngine.Random.value <= attackProbability)
-                {
-                    HumanAngerManager.Instance?.TriggerAttack(transform.position);
-                }
+                HumanAngerManager.Instance?.TriggerAttack(transform.position);
             }
         }
     }
 
-    private void EvaluateSuckingDangerAttack()
+    private void EvaluateSuckingDanger()
     {
-        feedingTimer += Time.deltaTime;
-        if (feedingTimer < feedingCheckInterval) return;
-        feedingTimer = 0f;
+        attackCheckTimer += Time.deltaTime;
+        if (attackCheckTimer < checkInterval) return;
+        attackCheckTimer = 0f;
 
         float angerMult = HumanAngerManager.Instance != null ? HumanAngerManager.Instance.CurrentAngerMultiplier : 1f;
-        float suckRiskMultiplier = (suckAction != null && suckAction.IsPressed()) ? 2.0f : 0.5f;
-        float attackProb = currentZoneDangerRatio * angerMult * 0.3f * suckRiskMultiplier;
+        bool isHolding = (suckAction != null && suckAction.IsPressed()) || (Mouse.current != null && Mouse.current.leftButton.isPressed);
+        float suckRisk = isHolding ? 2.0f : 0.5f;
 
-        if (UnityEngine.Random.value <= attackProb)
+        if (UnityEngine.Random.value <= currentZoneDangerRatio * angerMult * 0.3f * suckRisk)
         {
             HumanAngerManager.Instance?.TriggerAttack(transform.position);
         }
@@ -537,12 +517,30 @@ public class MosquitoController : MonoBehaviour
     {
         if (isDead) return;
 
+        AudioManager.Instance?.PlaySFX(AudioManager.SFXType.Slap);
+        ExecuteDeathSequence();
+    }
+
+    public void DieFromStarvation()
+    {
+        if (isDead) return;
+        if (Time.time - playStartTime < 0.5f) return;
+
+        Debug.LogError("<color=red>[모기 기아 사망] 혈액이 0에 도달하여 굶어 죽었습니다!</color>");
+        ExecuteDeathSequence();
+    }
+
+    private void ExecuteDeathSequence()
+    {
+        if (isDead) return;
+
         isDead = true;
         currentState = MosquitoState.Dead;
 
         AudioManager.Instance?.StopMosquitoBuzz();
-        AudioManager.Instance?.PlaySFX(AudioManager.SFXType.Slap);
         AudioManager.Instance?.PlaySFX(AudioManager.SFXType.GameOver);
+
+        BloodManager.Instance?.StopTimer();
 
         StopAllCoroutines();
         ResetTimeScale();
@@ -554,38 +552,21 @@ public class MosquitoController : MonoBehaviour
             rb.simulated = false;
         }
 
-        if (playerInput != null)
-        {
-            playerInput.enabled = false;
-        }
-
-        if (HumanAngerManager.Instance != null)
-        {
-            HumanAngerManager.Instance.ResetAnger();
-        }
-
-        Debug.LogError("<color=red>========================================</color>");
-        Debug.LogError("<color=red>[사망 연출] 모기가 피격되어 사망 모션을 재생합니다 (1.0초 후 게임오버 UI)</color>");
-        Debug.LogError("<color=red>========================================</color>");
+        if (playerInput != null) playerInput.enabled = false;
+        HumanAngerManager.Instance?.ResetAnger();
 
         StartCoroutine(DeathMotionRoutine());
     }
 
     private IEnumerator DeathMotionRoutine()
     {
-        // 1. 애니메이터 비활성화하여 사망 스프라이트 유지
         if (animator != null) animator.enabled = false;
+        if (spriteRenderer != null && deathSprite != null) spriteRenderer.sprite = deathSprite;
 
-        // 2. 사망 스프라이트 교체
-        if (spriteRenderer != null && deathSprite != null)
-        {
-            spriteRenderer.sprite = deathSprite;
-        }
-
-        // 3. 타격 피격 압축 연출 (납작하게 찌그러짐)
-        Vector3 baseScale = transform.localScale;
+        Vector3 baseScale = Vector3.one;
         float timer = 0f;
         float flattenDuration = 0.15f;
+
         while (timer < flattenDuration)
         {
             timer += Time.deltaTime;
@@ -595,13 +576,8 @@ public class MosquitoController : MonoBehaviour
         }
 
         transform.localScale = new Vector3(baseScale.x * 1.4f, baseScale.y * 0.4f, baseScale.z);
+        yield return new WaitForSeconds(Mathf.Max(0f, 1.0f - flattenDuration));
 
-        // 4. 납작해진 사망 상태로 1.0초 대기
-        float remainingDelay = Mathf.Max(0f, 1.0f - flattenDuration);
-        yield return new WaitForSeconds(remainingDelay);
-
-        // 5. 정확히 1.0초 후 게임오버 결과창 출력
-        Debug.LogError("<color=yellow>[GAME OVER] 1.0초 사망 모션 완료 -> 게임오버 결과창 페이드인</color>");
         OnGameOver?.Invoke();
     }
 
@@ -610,13 +586,12 @@ public class MosquitoController : MonoBehaviour
         isDead = false;
         currentState = MosquitoState.Flying;
         transform.position = spawnPosition;
-        currentBlood = 0f;
-        currentTailLevel = 0;
+        transform.localScale = Vector3.one;
+        BloodManager.Instance?.ResetBlood();
+        currentBlood = BloodManager.Instance != null ? BloodManager.Instance.CurrentBlood : 40f;
+        playStartTime = Time.time;
 
         CalculateEffectiveSpeed();
-        UpdateTailVisual();
-        UpdateBodyGauge();
-
         ResetTimeScale();
 
         if (rb != null)
@@ -625,10 +600,7 @@ public class MosquitoController : MonoBehaviour
             rb.linearVelocity = Vector2.zero;
         }
 
-        if (playerInput != null)
-        {
-            playerInput.enabled = true;
-        }
+        if (playerInput != null) playerInput.enabled = true;
 
         SwitchActionMapSafely("Flying");
         UpdateAnimationState();
@@ -643,11 +615,6 @@ public class MosquitoController : MonoBehaviour
     {
         if (isDead) return;
         moveInput = context.ReadValue<Vector2>();
-
-        if (moveInput != Vector2.zero)
-        {
-            lastNonZeroMoveDirection = moveInput.normalized;
-        }
     }
 
     public void OnLand(InputAction.CallbackContext context)
@@ -658,34 +625,23 @@ public class MosquitoController : MonoBehaviour
         if (hit == null) return;
 
         Vector3 landingPoint = hit.ClosestPoint(transform.position);
-
         BitingZone bZone = hit.GetComponent<BitingZone>() ?? hit.GetComponentInParent<BitingZone>();
+
         if (bZone == null)
         {
             bZone = hit.gameObject.AddComponent<BitingZone>();
-            IBodyPartZone bpZone = hit.GetComponent<IBodyPartZone>() ?? hit.GetComponentInParent<IBodyPartZone>();
-            if (bpZone != null)
-            {
-                if (hit.name.Contains("Head") || hit.transform.parent != null && hit.transform.parent.name.Contains("Head"))
-                    bZone.CurrentZoneType = GlobalEnums.ZoneType.Red;
-                else if (hit.name.Contains("Upper") || hit.transform.parent != null && hit.transform.parent.name.Contains("Upper"))
-                    bZone.CurrentZoneType = GlobalEnums.ZoneType.Yellow;
-                else
-                    bZone.CurrentZoneType = GlobalEnums.ZoneType.Green;
-            }
+            if (hit.name.Contains("Head") || (hit.transform.parent != null && hit.transform.parent.name.Contains("Head")))
+                bZone.CurrentZoneType = GlobalEnums.ZoneType.Red;
+            else if (hit.name.Contains("Upper") || (hit.transform.parent != null && hit.transform.parent.name.Contains("Upper")))
+                bZone.CurrentZoneType = GlobalEnums.ZoneType.Yellow;
+            else
+                bZone.CurrentZoneType = GlobalEnums.ZoneType.Green;
         }
 
-        if (bZone != null)
-        {
-            if (bZone.IsPositionAlreadyBitten(landingPoint))
-            {
-                Debug.Log("[Mosquito] 이 위치 근처는 이미 물려서 자국이 남아있습니다!");
-                return;
-            }
+        if (bZone.IsPositionAlreadyBitten(landingPoint)) return;
 
-            currentBitingZone = bZone;
-            currentZoneMaxSuckAmount = bZone.GetMaxSuckAmount();
-        }
+        currentBitingZone = bZone;
+        currentZoneMaxSuckAmount = bZone.GetMaxSuckAmount();
 
         IBodyPartZone zone = hit.GetComponent<IBodyPartZone>() ?? hit.GetComponentInParent<IBodyPartZone>();
         if (zone != null)
@@ -697,8 +653,6 @@ public class MosquitoController : MonoBehaviour
 
     private void StartLandingSequence(Collider2D skin, float dangerRatio)
     {
-        if (isDead) return;
-
         currentState = MosquitoState.Landing;
         transform.position = skin.ClosestPoint(transform.position);
 
@@ -712,17 +666,13 @@ public class MosquitoController : MonoBehaviour
     private IEnumerator WaitLandingAnimationRoutine(float dangerRatio)
     {
         yield return new WaitForSeconds(0.3f);
-
         if (isDead) yield break;
 
         currentState = MosquitoState.Checking;
         currentSkillCheckCount = 0;
         UpdateAnimationState();
 
-        if (SkillCheckUI.Instance != null)
-        {
-            SkillCheckUI.Instance.BeginSkillCheck(1f + dangerRatio, OnDbdSkillCheckCompleted);
-        }
+        SkillCheckUI.Instance?.BeginSkillCheck(1f + dangerRatio, OnDbdSkillCheckCompleted);
     }
 
     private void OnDbdSkillCheckCompleted(SkillCheckUI.SkillCheckResult result)
@@ -740,13 +690,9 @@ public class MosquitoController : MonoBehaviour
             currentSkillCheckCount++;
 
             if (currentSkillCheckCount >= requiredSkillChecks)
-            {
                 StartSuckingSequence();
-            }
             else
-            {
-                SkillCheckUI.Instance.BeginSkillCheck(1.3f, OnDbdSkillCheckCompleted);
-            }
+                SkillCheckUI.Instance?.BeginSkillCheck(1.3f, OnDbdSkillCheckCompleted);
         }
         else
         {
@@ -754,7 +700,6 @@ public class MosquitoController : MonoBehaviour
             HumanAngerManager.Instance?.TriggerAttack(transform.position);
 
             FinishBiteSession();
-
             currentState = MosquitoState.Flying;
             SwitchActionMapSafely("Flying");
             UpdateAnimationState();
@@ -763,10 +708,8 @@ public class MosquitoController : MonoBehaviour
 
     private void OnCheckInputReceived(InputAction.CallbackContext context)
     {
-        if (isDead) return;
-
-        if (currentState == MosquitoState.Checking && SkillCheckUI.Instance != null)
-            SkillCheckUI.Instance.OnInputPressed();
+        if (isDead || currentState != MosquitoState.Checking) return;
+        SkillCheckUI.Instance?.OnInputPressed();
     }
 
     private void OnTakeOffInputReceived(InputAction.CallbackContext context)
@@ -776,16 +719,12 @@ public class MosquitoController : MonoBehaviour
 
     public void PerformTakeOff()
     {
-        if (isDead) return;
+        if (isDead || currentState != MosquitoState.Sucking) return;
 
-        if (currentState == MosquitoState.Sucking)
-        {
-            FinishBiteSession();
-
-            currentState = MosquitoState.Flying;
-            SwitchActionMapSafely("Flying");
-            UpdateAnimationState();
-        }
+        FinishBiteSession();
+        currentState = MosquitoState.Flying;
+        SwitchActionMapSafely("Flying");
+        UpdateAnimationState();
     }
 
     private void UpdateAnimationState()
@@ -797,15 +736,15 @@ public class MosquitoController : MonoBehaviour
         animator.SetBool(HashIsLanding, currentState == MosquitoState.Landing);
         animator.SetBool(HashIsChecking, currentState == MosquitoState.Checking);
 
-        bool isHoldingSuck = (currentState == MosquitoState.Sucking &&
+        bool isHoldingSuck = currentState == MosquitoState.Sucking &&
                              ((suckAction != null && suckAction.IsPressed()) ||
-                              (Mouse.current != null && Mouse.current.leftButton.isPressed)));
+                              (Mouse.current != null && Mouse.current.leftButton.isPressed));
         animator.SetBool(HashIsSucking, isHoldingSuck);
     }
 
     private void SwitchActionMapSafely(string mapName)
     {
-        if (playerInput != null && playerInput.actions.FindActionMap(mapName) != null)
+        if (playerInput != null && playerInput.actions != null && playerInput.actions.FindActionMap(mapName) != null)
             playerInput.SwitchCurrentActionMap(mapName);
     }
 
