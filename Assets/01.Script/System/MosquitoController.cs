@@ -219,8 +219,24 @@ public class MosquitoController : MonoBehaviour
         }
         else if (currentState == MosquitoState.Sucking)
         {
+            // 스페이스바 누르면 즉시 이륙 탈출
+            if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
+            {
+                PerformTakeOff();
+                return;
+            }
+
             ProcessBloodSucking();
             EvaluateSuckingDangerAttack();
+        }
+        else if (currentState == MosquitoState.Checking)
+        {
+            // 스킬체크 도중에도 스페이스바 누르면 탈출
+            if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
+            {
+                PerformTakeOff();
+                return;
+            }
         }
     }
 
@@ -337,13 +353,18 @@ public class MosquitoController : MonoBehaviour
         currentState = MosquitoState.Sucking;
         currentZoneSuckedBlood = 0f; // 이번 세션 흡혈량 0으로 초기화
 
-        SwitchActionMapSafely("Flying");
+        // [핵심 수정] 흡혈(Suck)과 이륙(TakeOff) 액션이 포함된 "Feeding" 액션 맵으로 전환!
+        SwitchActionMapSafely("Feeding");
         UpdateAnimationState();
     }
 
     private void ProcessBloodSucking()
     {
-        if (suckAction != null && suckAction.IsPressed())
+        // 1. New Input System 또는 마우스 좌클릭 직접 감지
+        bool isSuckingHeld = (suckAction != null && suckAction.IsPressed()) ||
+                             (Mouse.current != null && Mouse.current.leftButton.isPressed);
+
+        if (isSuckingHeld)
         {
             float previousBlood = currentBlood;
             float suckDelta = suckRate * Time.deltaTime;
@@ -368,6 +389,7 @@ public class MosquitoController : MonoBehaviour
             }
             else if (currentBlood >= maxBlood)
             {
+                Debug.Log("<color=green>[흡혈 완료] 최대 혈액량에 도달하여 비행 상태로 전환합니다.</color>");
                 OnSuckingCompleted();
             }
         }
@@ -700,6 +722,11 @@ public class MosquitoController : MonoBehaviour
 
     private void OnTakeOffInputReceived(InputAction.CallbackContext context)
     {
+        PerformTakeOff();
+    }
+
+    public void PerformTakeOff()
+    {
         if (isDead) return;
 
         if (currentState == MosquitoState.Sucking || currentState == MosquitoState.Checking)
@@ -721,7 +748,9 @@ public class MosquitoController : MonoBehaviour
         animator.SetBool(HashIsLanding, currentState == MosquitoState.Landing);
         animator.SetBool(HashIsChecking, currentState == MosquitoState.Checking);
 
-        bool isHoldingSuck = (currentState == MosquitoState.Sucking && suckAction != null && suckAction.IsPressed());
+        bool isHoldingSuck = (currentState == MosquitoState.Sucking &&
+                             ((suckAction != null && suckAction.IsPressed()) ||
+                              (Mouse.current != null && Mouse.current.leftButton.isPressed)));
         animator.SetBool(HashIsSucking, isHoldingSuck);
     }
 
