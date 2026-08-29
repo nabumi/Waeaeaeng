@@ -1638,7 +1638,19 @@ MonoBehaviour:
     m_ActionId: d4de5ba2-3300-4df7-b3f7-b46aa4408566
     m_ActionName: 'Feeding/TakeOff[/Keyboard/space]'
   - m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 636591781}
+        m_TargetAssemblyTypeName: MosquitoController, Assembly-CSharp
+        m_MethodName: OnDash
+        m_Mode: 0
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
     m_ActionId: ae29e711-18f5-4d0c-83ea-e1f8ed36f78a
     m_ActionName: 'Flying/Dash[/Keyboard/leftShift]'
   m_NeverAutoSwitchControlSchemes: 0
@@ -1669,7 +1681,7 @@ MonoBehaviour:
   dashBloodCost: 5
   dashSpeedMultiplier: 2
   dashDuration: 0.5
-  slowTimeScale: 3
+  slowTimeScale: 0.2
   dashCooldown: 1
   humanSkinLayer:
     serializedVersion: 2
