@@ -46,10 +46,10 @@ public class MosquitoController : MonoBehaviour
     [SerializeField] private float dashBloodCost = 5.0f;
 
     [Header("대시 및 불릿 타임 설정")]
-    [SerializeField] private float dashSpeedMultiplier = 2.8f;
-    [SerializeField] private float dashDuration = 0.35f;
+    [SerializeField] private float dashSpeedMultiplier = 1.5f;
+    [SerializeField] private float dashDuration = 0.15f;
     [SerializeField] private float slowTimeScale = 0.2f;
-    [SerializeField] private float dashCooldown = 0.8f;
+    [SerializeField] private float dashCooldown = 0.6f;
 
     private bool isDashing = false;
     public bool IsDashing => isDashing;
@@ -415,6 +415,9 @@ public class MosquitoController : MonoBehaviour
         Time.timeScale = effectiveSlow;
         Time.fixedDeltaTime = 0.02f * Time.timeScale;
 
+        // 애니메이터가 스프라이트를 매 프레임 덮어쓰지 못하도록 일시 비활성화
+        if (animator != null) animator.enabled = false;
+
         // 닷지(대시) 스프라이트 적용
         if (dodgeSprite != null && spriteRenderer != null)
         {
@@ -422,7 +425,6 @@ public class MosquitoController : MonoBehaviour
         }
 
         AudioManager.Instance?.PlaySFX(AudioManager.SFXType.Dash);
-        UpdateAnimationState();
 
         Debug.Log($"<color=yellow>[MosquitoController] ⚡ 닷지(대시) 발동! (슬로우모션 Time.timeScale = {Time.timeScale:F2}, 지속시간 = {dashDuration}s)</color>");
 
@@ -430,6 +432,12 @@ public class MosquitoController : MonoBehaviour
 
         isDashing = false;
         ResetTimeScale();
+
+        // 대시 종료 후 애니메이터 재개 및 비행 모션 복구
+        if (animator != null)
+        {
+            animator.enabled = true;
+        }
         UpdateAnimationState();
     }
 

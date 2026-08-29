@@ -1679,10 +1679,10 @@ MonoBehaviour:
   hoverFrequency: 1
   flightBloodDrainRate: 1.5
   dashBloodCost: 5
-  dashSpeedMultiplier: 2
-  dashDuration: 0.5
+  dashSpeedMultiplier: 1.5
+  dashDuration: 0.15
   slowTimeScale: 0.2
-  dashCooldown: 1
+  dashCooldown: 0.6
   humanSkinLayer:
     serializedVersion: 2
     m_Bits: 8
