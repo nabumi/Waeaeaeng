@@ -53,11 +53,7 @@ public class HandAttackUIController : MonoBehaviour
         this.mainCamera = Camera.main != null ? Camera.main : FindAnyObjectByType<Camera>();
 
         // Z축 랜덤 회전 적용
-        RectTransform rectTransform = GetComponent<RectTransform>();
-        if (rectTransform != null)
-        {
-            rectTransform.localRotation = Quaternion.Euler(0f, 0f, zRotationAngle);
-        }
+        transform.localRotation = Quaternion.Euler(0f, 0f, zRotationAngle);
 
         // 초기 오브젝트 상태 정리
         if (handGraphicObject != null) handGraphicObject.SetActive(false);
@@ -174,26 +170,31 @@ public class HandAttackUIController : MonoBehaviour
     {
         if (parentCanvas == null || mainCamera == null) return;
 
-        RectTransform rectTransform = GetComponent<RectTransform>();
+        RectTransform rectTransform = transform as RectTransform;
 
         if (parentCanvas.renderMode == RenderMode.ScreenSpaceOverlay)
         {
-            rectTransform.position = mainCamera.WorldToScreenPoint(targetWorldPosition);
+            Vector3 screenPos = mainCamera.WorldToScreenPoint(targetWorldPosition);
+            if (rectTransform != null) rectTransform.position = screenPos;
+            else transform.position = screenPos;
         }
         else if (parentCanvas.renderMode == RenderMode.ScreenSpaceCamera)
         {
             Camera renderCam = parentCanvas.worldCamera != null ? parentCanvas.worldCamera : mainCamera;
-            RectTransformUtility.ScreenPointToLocalPointInRectangle(
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
                 parentCanvas.transform as RectTransform,
                 mainCamera.WorldToScreenPoint(targetWorldPosition),
                 renderCam,
                 out Vector2 localPoint
-            );
-            rectTransform.anchoredPosition = localPoint;
+            ))
+            {
+                if (rectTransform != null) rectTransform.anchoredPosition = localPoint;
+                else transform.localPosition = localPoint;
+            }
         }
         else
         {
-            rectTransform.position = targetWorldPosition;
+            transform.position = targetWorldPosition;
         }
     }
 

@@ -148,6 +148,13 @@ public class HumanAngerManager : MonoBehaviour
 
         if (hitMosquito != null && hitMosquito.TryGetComponent<MosquitoController>(out var mosquito))
         {
+            if (mosquito.IsDashing)
+            {
+                Debug.Log("<color=yellow>[대쉬 회피!] 모기가 대쉬 무적을 이용해 손바닥 공격을 아슬아슬하게 회피했습니다!</color>");
+                OnAttackDodged();
+                return;
+            }
+
             Debug.LogError("<color=red>[찰싹!] 손바닥 타격 성공! (모기 잡힘)</color>");
             mosquito.OnHitByHumanHand();
             ResetAnger();

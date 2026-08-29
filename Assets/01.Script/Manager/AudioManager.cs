@@ -40,6 +40,7 @@ public class AudioManager : MonoBehaviour
     public enum SFXType
     {
         Slap,           // 손바닥 강타 슬랩 소리
+        Dash,           // 대쉬/회피 바람 가르는 소리
         QteSuccess,     // QTE 일반 성공 벨 사운드
         QteGreat,       // QTE 대성공 차임 사운드
         QteFail,        // QTE 실패 부저 사운드
@@ -59,6 +60,7 @@ public class AudioManager : MonoBehaviour
 
     [Header("SFX 클립 매핑")]
     [SerializeField] private AudioClip slapClip;
+    [SerializeField] private AudioClip dashClip;
     [SerializeField] private AudioClip qteSuccessClip;
     [SerializeField] private AudioClip qteGreatClip;
     [SerializeField] private AudioClip qteFailClip;
@@ -163,6 +165,7 @@ public class AudioManager : MonoBehaviour
         if (inGameBGM == null) inGameBGM = Resources.Load<AudioClip>("Audio/bgm_ingame");
         if (lobbyBGM == null) lobbyBGM = Resources.Load<AudioClip>("Audio/lobbybgm");
         if (slapClip == null) slapClip = Resources.Load<AudioClip>("Audio/alex_jauk-slap-237622");
+        if (dashClip == null) dashClip = Resources.Load<AudioClip>("Audio/sfx_dash");
         if (qteSuccessClip == null) qteSuccessClip = Resources.Load<AudioClip>("Audio/sfx_qte_success");
         if (qteGreatClip == null) qteGreatClip = Resources.Load<AudioClip>("Audio/sfx_qte_great");
         if (qteFailClip == null) qteFailClip = Resources.Load<AudioClip>("Audio/sfx_qte_fail");
@@ -170,13 +173,14 @@ public class AudioManager : MonoBehaviour
         if (gameOverClip == null) gameOverClip = Resources.Load<AudioClip>("Audio/sfx_gameover");
         if (mosquitoBuzzClip == null) mosquitoBuzzClip = Resources.Load<AudioClip>("Audio/freesound_community-single-mosquito-buzz-69360");
 
-        Debug.Log($"<color=green>[AudioManager] 오디오 클립 로드 완료 -> BGM: {(inGameBGM != null ? inGameBGM.name : "null")}, Slap: {(slapClip != null ? slapClip.name : "null")}, Buzz: {(mosquitoBuzzClip != null ? mosquitoBuzzClip.name : "null")}</color>");
+        Debug.Log($"<color=green>[AudioManager] 오디오 클립 로드 완료 -> BGM: {(inGameBGM != null ? inGameBGM.name : "null")}, Slap: {(slapClip != null ? slapClip.name : "null")}, Dash: {(dashClip != null ? dashClip.name : "null")}, Buzz: {(mosquitoBuzzClip != null ? mosquitoBuzzClip.name : "null")}</color>");
     }
 
     private void RegisterClips()
     {
         sfxClipMap.Clear();
         if (slapClip != null) sfxClipMap[SFXType.Slap] = slapClip;
+        if (dashClip != null) sfxClipMap[SFXType.Dash] = dashClip;
         if (qteSuccessClip != null) sfxClipMap[SFXType.QteSuccess] = qteSuccessClip;
         if (qteGreatClip != null) sfxClipMap[SFXType.QteGreat] = qteGreatClip;
         if (qteFailClip != null) sfxClipMap[SFXType.QteFail] = qteFailClip;

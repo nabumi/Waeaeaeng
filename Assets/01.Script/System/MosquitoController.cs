@@ -33,6 +33,20 @@ public class MosquitoController : MonoBehaviour
     [SerializeField] private float hoverAmplitude = 0.15f;
     [SerializeField] private float hoverFrequency = 4f;
 
+    [Header("대쉬(회피) 설정")]
+    [Tooltip("대쉬 시 이동 속도 배율")]
+    [SerializeField] private float dashSpeedMultiplier = 2.6f;
+    [Tooltip("대쉬 지속 시간 (초)")]
+    [SerializeField] private float dashDuration = 0.16f;
+    [Tooltip("대쉬 재사용 대기 시간 (초)")]
+    [SerializeField] private float dashCooldown = 0.7f;
+
+    private bool isDashing = false;
+    public bool IsDashing => isDashing;
+    private float lastDashTime = -99f;
+    private Vector2 lastMoveDirection = Vector2.up;
+    private Vector2 currentDashVelocity = Vector2.zero;
+
     [Header("피부 안착 감지 설정")]
     [SerializeField] private LayerMask humanSkinLayer;
     [SerializeField] private float landingRadius = 0.8f;
@@ -125,6 +139,12 @@ public class MosquitoController : MonoBehaviour
     {
         if (isDead || currentState == MosquitoState.Dead) return;
 
+        if (isDashing)
+        {
+            rb.linearVelocity = currentDashVelocity;
+            return;
+        }
+
         if (currentState == MosquitoState.Flying)
         {
             Vector2 targetVelocity = moveInput * moveSpeed;
@@ -147,6 +167,7 @@ public class MosquitoController : MonoBehaviour
 
         if (currentState == MosquitoState.Flying)
         {
+            HandleDashInput();
             EvaluateFlyingLingerAttack();
         }
         else if (currentState == MosquitoState.Sucking)
@@ -335,6 +356,65 @@ public class MosquitoController : MonoBehaviour
     {
         if (isDead) return;
         moveInput = context.ReadValue<Vector2>();
+        if (moveInput != Vector2.zero)
+        {
+            lastMoveDirection = moveInput.normalized;
+        }
+    }
+
+    private void HandleDashInput()
+    {
+        if (isDashing) return;
+
+        // Shift 키 또는 마우스 우클릭 입력 감지
+        bool dashTriggered = false;
+        if (Keyboard.current != null && (Keyboard.current.leftShiftKey.wasPressedThisFrame || Keyboard.current.rightShiftKey.wasPressedThisFrame))
+        {
+            dashTriggered = true;
+        }
+        else if (Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame)
+        {
+            dashTriggered = true;
+        }
+
+        if (dashTriggered)
+        {
+            TryPerformDash();
+        }
+    }
+
+    public void TryPerformDash()
+    {
+        if (isDead || currentState != MosquitoState.Flying || isDashing) return;
+        if (Time.time < lastDashTime + dashCooldown) return;
+
+        Vector2 dashDir = moveInput != Vector2.zero ? moveInput.normalized : (lastMoveDirection != Vector2.zero ? lastMoveDirection : Vector2.up);
+        StartCoroutine(DashRoutine(dashDir));
+    }
+
+    private IEnumerator DashRoutine(Vector2 direction)
+    {
+        isDashing = true;
+        lastDashTime = Time.time;
+        currentDashVelocity = direction * (moveSpeed * dashSpeedMultiplier);
+
+        AudioManager.Instance?.PlaySFX(AudioManager.SFXType.Dash);
+
+        // 순간적인 스프라이트 스트레치 연출
+        Vector3 originalScale = transform.localScale;
+        transform.localScale = new Vector3(originalScale.x * 1.3f, originalScale.y * 0.8f, originalScale.z);
+
+        float elapsed = 0f;
+        while (elapsed < dashDuration)
+        {
+            if (isDead || currentState != MosquitoState.Flying) break;
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        transform.localScale = originalScale;
+        currentDashVelocity = Vector2.zero;
+        isDashing = false;
     }
 
     public void OnLand(InputAction.CallbackContext context)
