@@ -1,9 +1,10 @@
+using System;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.InputSystem;
 
 /// <summary>
-/// 게임 전역 상태(진행 중, 게임 오버, 게임 클리어) 및 씬 전환을 관리하는 매니저
+/// 게임 전역 상태(진행 중, 게임 오버, 게임 클리어) 관리 및 씬 전환을 관장하는 매니저
 /// </summary>
 public class GameManager : MonoBehaviour
 {
@@ -20,8 +21,14 @@ public class GameManager : MonoBehaviour
     [SerializeField] private GameState currentState = GameState.Playing;
     public GameState CurrentState => currentState;
 
+    [Header("UI 컨트롤러 수동 바인딩 (선택 사항)")]
+    [Tooltip("비워둘 경우 각 UI 컨트롤러의 Singleton Instance를 자동 활용합니다.")]
+    [SerializeField] private GameOverUIController gameOverUI;
+    [SerializeField] private GameClearUIController gameClearUI;
+
     private void Awake()
     {
+        // 싱글톤 데이터 레이어 보장
         if (Instance == null)
         {
             Instance = this;
@@ -31,104 +38,35 @@ public class GameManager : MonoBehaviour
             Destroy(gameObject);
             return;
         }
-
-        EnsureUIControllers();
     }
 
     private void Start()
     {
+        // 게임 시작 시 BGM 재생 및 상태 초기화
         AudioManager.Instance?.PlayInGameBGM();
-        EnsureUIControllers();
+        currentState = GameState.Playing;
+        Time.timeScale = 1.0f; // 시간 흐름 정상화 ($\Delta t_{scaled} = \Delta t_{unscaled}$)
     }
 
     private void OnEnable()
     {
-        MosquitoController.OnGameOver += OnGameOverTriggered;
+        // [수정 완료] 최신화된 MosquitoController.OnMosquitoDied 이벤트 구독
+        MosquitoController.OnMosquitoDied += OnGameOverTriggered;
+
+        // EscapeSystem 게임 클리어 이벤트 구독
         EscapeSystem.OnGameClear += OnGameClearTriggered;
     }
 
     private void OnDisable()
     {
-        MosquitoController.OnGameOver -= OnGameOverTriggered;
+        // [수정 완료] 메모리 누수 방지를 위한 이벤트 구독 해제
+        MosquitoController.OnMosquitoDied -= OnGameOverTriggered;
         EscapeSystem.OnGameClear -= OnGameClearTriggered;
-    }
-
-    private GameObject gameoverObj;
-    private GameObject gameclearObj;
-
-    private void EnsureUIControllers()
-    {
-        // 1. gameover 및 gameclear 오브젝트 찾아서 UIController 부착 및 초기 비활성화 보장
-        if (gameoverObj == null || gameclearObj == null)
-        {
-            var allCanvases = Resources.FindObjectsOfTypeAll<Canvas>();
-            foreach (var canvas in allCanvases)
-            {
-                if (gameoverObj == null)
-                {
-                    var t = canvas.transform.Find("gameover");
-                    if (t != null) gameoverObj = t.gameObject;
-                }
-                if (gameclearObj == null)
-                {
-                    var t = canvas.transform.Find("gameclear");
-                    if (t != null) gameclearObj = t.gameObject;
-                }
-            }
-        }
-
-        if (gameoverObj == null || gameclearObj == null)
-        {
-            var allTransforms = Resources.FindObjectsOfTypeAll<Transform>();
-            foreach (var t in allTransforms)
-            {
-                if (gameoverObj == null && t.name.Equals("gameover", System.StringComparison.OrdinalIgnoreCase))
-                {
-                    gameoverObj = t.gameObject;
-                }
-                if (gameclearObj == null && t.name.Equals("gameclear", System.StringComparison.OrdinalIgnoreCase))
-                {
-                    gameclearObj = t.gameObject;
-                }
-            }
-        }
-
-        if (gameoverObj != null)
-        {
-            if (gameoverObj.GetComponent<GameOverUIController>() == null)
-            {
-                gameoverObj.AddComponent<GameOverUIController>();
-            }
-
-            // 게임 시작 시 무조건 비활성화
-            if (currentState == GameState.Playing)
-            {
-                var canvas = gameoverObj.GetComponent<Canvas>();
-                if (canvas != null) canvas.enabled = false;
-                gameoverObj.SetActive(false);
-            }
-        }
-
-        if (gameclearObj != null)
-        {
-            if (gameclearObj.GetComponent<GameClearUIController>() == null)
-            {
-                gameclearObj.AddComponent<GameClearUIController>();
-            }
-
-            // 게임 시작 시 무조건 비활성화
-            if (currentState == GameState.Playing)
-            {
-                var canvas = gameclearObj.GetComponent<Canvas>();
-                if (canvas != null) canvas.enabled = false;
-                gameclearObj.SetActive(false);
-            }
-        }
     }
 
     private void Update()
     {
-        // 게임오버나 클리어 상태일 때 R키로 빠른 재시작 지원
+        // 1. 게임오버 또는 클리어 상태일 때 'R' 키로 빠른 재시작 지원
         if (currentState != GameState.Playing)
         {
             if (Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame)
@@ -138,34 +76,30 @@ public class GameManager : MonoBehaviour
         }
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-        // 에디터/개발 빌드에서 F2 키로 클리어 화면 즉시 테스트 지원
+        // 2. 디버그/에디터 환경: F2 키 입력 시 게임 클리어 테스트
         if (Keyboard.current != null && Keyboard.current.f2Key.wasPressedThisFrame)
         {
-            Debug.LogWarning("<color=cyan>[치트] F2 입력 -> OnGameClearTriggered() 즉시 테스트 실행</color>");
+            Debug.LogWarning("<color=cyan>[치트] F2 입력 -> OnGameClearTriggered() 디버그 실행</color>");
             OnGameClearTriggered();
         }
 #endif
     }
 
     /// <summary>
-    /// 모기 사망 이벤트 수신
+    /// 모기 사망 이벤트 수신 시 호출
     /// </summary>
     private void OnGameOverTriggered()
     {
+        // 이미 게임 종료 상태라면 중복 실행 방지
         if (currentState != GameState.Playing) return;
         currentState = GameState.GameOver;
 
-        Debug.LogWarning("<color=yellow>[GameManager] GAME OVER 트리거 -> 결과창 활성화</color>");
+        Debug.LogWarning("<color=yellow>[GameManager] GAME OVER 상태 전환 -> 사망 결과창 출력 지시</color>");
 
-        EnsureUIControllers();
-
-        if (gameoverObj != null)
+        // Direct 참조 우선, 없으면 Singleton Instance로 안전하게 접근 (FindObjects 연산 철거)
+        if (gameOverUI != null)
         {
-            gameoverObj.SetActive(true);
-            var canvas = gameoverObj.GetComponent<Canvas>();
-            if (canvas != null) canvas.enabled = true;
-            var ctrl = gameoverObj.GetComponent<GameOverUIController>() ?? gameoverObj.AddComponent<GameOverUIController>();
-            ctrl.ShowGameOverUI();
+            gameOverUI.ShowGameOverUI();
         }
         else if (GameOverUIController.Instance != null)
         {
@@ -173,41 +107,25 @@ public class GameManager : MonoBehaviour
         }
         else
         {
-            var allTransforms = Resources.FindObjectsOfTypeAll<Transform>();
-            foreach (var t in allTransforms)
-            {
-                if (t.name.Equals("gameover", System.StringComparison.OrdinalIgnoreCase))
-                {
-                    t.gameObject.SetActive(true);
-                    var canvas = t.GetComponent<Canvas>();
-                    if (canvas != null) canvas.enabled = true;
-                    var ctrl = t.GetComponent<GameOverUIController>() ?? t.gameObject.AddComponent<GameOverUIController>();
-                    ctrl.ShowGameOverUI();
-                    break;
-                }
-            }
+            Debug.LogError("<color=red>[GameManager] 씬 내에 GameOverUIController를 찾을 수 없습니다!</color>");
         }
     }
 
     /// <summary>
-    /// 모기 탈출 성공/승리 이벤트 수신
+    /// 모기 탈출 성공(승리) 이벤트 수신 시 호출
     /// </summary>
     private void OnGameClearTriggered()
     {
+        // 이미 게임 종료 상태라면 중복 실행 방지
         if (currentState != GameState.Playing) return;
         currentState = GameState.GameClear;
 
-        Debug.LogWarning("<color=green>[GameManager] GAME CLEAR 트리거 -> 승리 결과창 활성화</color>");
+        Debug.LogWarning("<color=green>[GameManager] GAME CLEAR 상태 전환 -> 승리 결과창 출력 지시</color>");
 
-        EnsureUIControllers();
-
-        if (gameclearObj != null)
+        // Direct 참조 우선, 없으면 Singleton Instance로 안전하게 접근
+        if (gameClearUI != null)
         {
-            gameclearObj.SetActive(true);
-            var canvas = gameclearObj.GetComponent<Canvas>();
-            if (canvas != null) canvas.enabled = true;
-            var ctrl = gameclearObj.GetComponent<GameClearUIController>() ?? gameclearObj.AddComponent<GameClearUIController>();
-            ctrl.ShowGameClearUI();
+            gameClearUI.ShowGameClearUI();
         }
         else if (GameClearUIController.Instance != null)
         {
@@ -215,24 +133,12 @@ public class GameManager : MonoBehaviour
         }
         else
         {
-            var allTransforms = Resources.FindObjectsOfTypeAll<Transform>();
-            foreach (var t in allTransforms)
-            {
-                if (t.name.Equals("gameclear", System.StringComparison.OrdinalIgnoreCase))
-                {
-                    t.gameObject.SetActive(true);
-                    var canvas = t.GetComponent<Canvas>();
-                    if (canvas != null) canvas.enabled = true;
-                    var ctrl = t.GetComponent<GameClearUIController>() ?? t.gameObject.AddComponent<GameClearUIController>();
-                    ctrl.ShowGameClearUI();
-                    break;
-                }
-            }
+            Debug.LogError("<color=red>[GameManager] 씬 내에 GameClearUIController를 찾을 수 없습니다!</color>");
         }
     }
 
     /// <summary>
-    /// 현재 씬 재로드
+    /// 현재 씬 재로드 (시간 배율 복구 포함)
     /// </summary>
     public void RestartCurrentScene()
     {

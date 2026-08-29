@@ -2,7 +2,8 @@ using System;
 using UnityEngine;
 
 /// <summary>
-/// 흡혈량, 현재 잔여 혈액(에너지), 생존 시간 및 탈출(150ml)/최대만복(200ml) 상태를 전역 관리하는 싱글톤 매니저
+/// 흡혈량, 현재 잔여 혈액(에너지), 생존 시간 및 탈출 상태를 전역 관리하는 싱글톤 매니저
+/// (씬 재시작 시 Time.timeScale 및 정적 이벤트 마비 현상을 완벽하게 방어합니다.)
 /// </summary>
 public class BloodManager : MonoBehaviour
 {
@@ -20,24 +21,19 @@ public class BloodManager : MonoBehaviour
             if (instance == null)
             {
                 instance = FindAnyObjectByType<BloodManager>();
-                if (instance == null)
-                {
-                    var go = new GameObject("[BloodManager]");
-                    instance = go.AddComponent<BloodManager>();
-                }
             }
             return instance;
         }
     }
 
     [Header("혈액 수치 설정")]
-    [Tooltip("최대 저장 가능한 혈액량")]
+    [Tooltip("최대 저장 가능한 혈액량 (ml)")]
     [SerializeField] private float maxTargetBlood = 200f;
 
-    [Tooltip("탈출구가 열리는 기준 혈액량")]
+    [Tooltip("탈출구가 열리는 기준 혈액량 (ml)")]
     [SerializeField] private float escapeThresholdBlood = 150f;
 
-    [Tooltip("게임 시작 시 지급되는 초기 혈액량")]
+    [Tooltip("게임 시작 시 지급되는 초기 혈액량 (ml)")]
     [SerializeField] private float initialBlood = 40f;
 
     // 내부 상태 변수
@@ -48,29 +44,35 @@ public class BloodManager : MonoBehaviour
     private bool isTrackingTime = true;
     private bool isEscapeTriggered = false;
 
-    // 외부 공개 이벤트 (Decoupling)
+    // 외부 공개 인스턴스 이벤트
     public event Action<float, float> OnBloodAmountChanged;
     public event Action<float, float> OnBloodSucked;
+
+    // 정적 이벤트 (씬 재작동 시 찌꺼기 제거 필수)
     public static event Action OnFullBelly;
     public static event Action OnBloodDepleted;
 
     // =========================================================================
-    // [외부 공개 프로퍼티 - GameOverUI 및 MosquitoController 연동]
+    // [외부 공개 프로퍼티]
     // =========================================================================
     public float MaxTargetBlood => maxTargetBlood;
     public float EscapeThresholdBlood => escapeThresholdBlood;
     public float CurrentBlood => currentBlood;
     public float TotalSuckedBlood => totalSuckedBlood;
-
-    // 생존 시간 연산: 추적 중일 때는 현재 시간과의 차이, 멈췄을 때는 최종 기록 반환
+    public float BloodRatio => maxTargetBlood > 0f ? Mathf.Clamp01(currentBlood / maxTargetBlood) : 0f;
     public float SurvivalTime => isTrackingTime ? (Time.time - gameStartTime) : finalSurvivalTime;
-
-    // 상태 체크 프로퍼티
     public bool IsEscapeReady => currentBlood >= escapeThresholdBlood;
     public bool IsFull => currentBlood >= maxTargetBlood;
 
     private void Awake()
     {
+        // 1. [핵심 해결책 1] 씬 재시작 시 정지되어 있던 시간을 즉시 1.0으로 강제 복구!
+        if (Time.timeScale == 0f)
+        {
+            Time.timeScale = 1.0f;
+            Debug.Log("<color=green>[BloodManager] Time.timeScale을 1.0f로 정상 복구했습니다.</color>");
+        }
+
         isApplicationQuitting = false;
 
         if (instance == null)
@@ -83,6 +85,9 @@ public class BloodManager : MonoBehaviour
             return;
         }
 
+        // 2. [핵심 해결책 2] 씬 재시작 시 잔여 정적 이벤트 체인 초기화
+        ClearStaticEvents();
+
         ResetBlood();
     }
 
@@ -90,9 +95,7 @@ public class BloodManager : MonoBehaviour
     {
         gameStartTime = Time.time;
         isTrackingTime = true;
-
-        // ⚠️ [기존 버그 수정] Start에서 currentBlood <= 0f 일 때 
-        // 무조건 40f로 되돌려 버리던 삼항 연산자 강제 초기화 구문을 완전히 제거했습니다.
+        BroadcastCurrentState();
     }
 
     private void OnApplicationQuit()
@@ -104,16 +107,31 @@ public class BloodManager : MonoBehaviour
     {
         if (instance == this)
         {
-            isApplicationQuitting = true;
+            instance = null;
+            ClearStaticEvents();
         }
     }
 
+    /// <summary>
+    /// 정적 이벤트에 남아있는 파괴된 객체들의 바인딩을 제거
+    /// </summary>
+    private static void ClearStaticEvents()
+    {
+        OnFullBelly = null;
+        OnBloodDepleted = null;
+    }
+
     // =========================================================================
-    // [핵심 게임 로직 메서드]
+    // [핵심 게임 로직 및 UI 동기화]
     // =========================================================================
 
+    public void BroadcastCurrentState()
+    {
+        OnBloodAmountChanged?.Invoke(currentBlood, maxTargetBlood);
+    }
+
     /// <summary>
-    /// 혈액 소모 (비행 자연 소모, 대시 소모 등)
+    /// 혈액 소모 공식: $V_{\text{current}} = \max(0, V_{\text{current}} - V_{\text{consume}})$
     /// </summary>
     public void ConsumeBlood(float amount)
     {
@@ -124,14 +142,11 @@ public class BloodManager : MonoBehaviour
 
         if (currentBlood <= 0f)
         {
-            Debug.LogWarning("<color=red>[BloodManager] 혈액이 완전히 고갈되었습니다! (기아 사망 트리거)</color>");
+            Debug.LogWarning("<color=red>[BloodManager] 혈액 고갈! (기아 사망 트리거)</color>");
             OnBloodDepleted?.Invoke();
         }
     }
 
-    /// <summary>
-    /// 모기가 피를 빨 때 호출하여 혈액을 충전하고 누적치 기록
-    /// </summary>
     public float RequestSuckBlood(float requestedAmount)
     {
         if (currentBlood >= maxTargetBlood) return 0f;
@@ -146,16 +161,13 @@ public class BloodManager : MonoBehaviour
         if (currentBlood >= escapeThresholdBlood && !isEscapeTriggered)
         {
             isEscapeTriggered = true;
-            Debug.LogWarning($"<color=green>[BloodManager] 탈출 기준({escapeThresholdBlood}ml) 달성! 탈출 시스템을 활성화합니다.</color>");
+            Debug.LogWarning($"<color=green>[BloodManager] 탈출 기준({escapeThresholdBlood}ml) 달성!</color>");
             OnFullBelly?.Invoke();
         }
 
         return actualSucked;
     }
 
-    /// <summary>
-    /// [F1 키 치트] 즉시 만복 상태로 변경
-    /// </summary>
     public void SetBloodFullCheat()
     {
         float added = maxTargetBlood - currentBlood;
@@ -170,12 +182,9 @@ public class BloodManager : MonoBehaviour
             OnFullBelly?.Invoke();
         }
 
-        Debug.LogWarning($"<color=cyan>[치트 활성화] F1 입력: 혈액량이 {maxTargetBlood}ml로 즉시 충전되었습니다!</color>");
+        Debug.LogWarning($"<color=cyan>[치트 활성화] F1 입력: 혈액량이 {maxTargetBlood}ml로 충전되었습니다!</color>");
     }
 
-    /// <summary>
-    /// 게임 오버 또는 클리어 시 생존 타이머를 멈추고 최종 기록 저장
-    /// </summary>
     public void StopTimer()
     {
         if (isTrackingTime)
@@ -185,9 +194,6 @@ public class BloodManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// 혈액 수치 및 타이머 완벽 초기화
-    /// </summary>
     public void ResetBlood()
     {
         currentBlood = initialBlood > 0f ? initialBlood : 40f;

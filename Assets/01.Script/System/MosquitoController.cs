@@ -21,7 +21,10 @@ public class MosquitoController : MonoBehaviour
     // =========================================================================
     // [이벤트 시스템]
     // =========================================================================
-    public static event Action OnGameOver;
+    /// <summary>
+    /// C# Action을 활용한 사망 이벤트 (외부 시스템 전파용)
+    /// </summary>
+    public static event Action OnMosquitoDied;
     public event Action<float, float> OnBloodAmountChanged; // (현재 피, 최대 피)
 
     [Header("현재 상태")]
@@ -29,7 +32,7 @@ public class MosquitoController : MonoBehaviour
     [SerializeField] private bool isDead = false;
 
     [Header("비행 및 이동 설정")]
-    [SerializeField] private float baseMoveSpeed = 5f;
+    [SerializeField] private float baseMoveSpeed = 5;
     [SerializeField] private float hoverAmplitude = 0.15f;
     [SerializeField] private float hoverFrequency = 4f;
 
@@ -376,7 +379,7 @@ public class MosquitoController : MonoBehaviour
 
     #endregion
 
-    #region 흡혈 및 세션 관리 (업데이트)
+    #region 흡혈 및 세션 관리
 
     private void OnSuckStarted(InputAction.CallbackContext context)
     {
@@ -394,7 +397,7 @@ public class MosquitoController : MonoBehaviour
     private void StartSuckingSequence()
     {
         currentState = MosquitoState.Sucking;
-        currentZoneSuckedBlood = 0f; // 안착 후 빨아들인 혈액량 초기화
+        currentZoneSuckedBlood = 0f;
         SwitchActionMapSafely("Feeding");
         UpdateAnimationState();
     }
@@ -431,18 +434,15 @@ public class MosquitoController : MonoBehaviour
             OnBloodAmountChanged?.Invoke(currentBlood, maxBlood);
             CalculateEffectiveSpeed();
 
-            // 1. 150ml 돌파 시 탈출 시스템 활성화
             if (currentBlood >= escapeThreshold || (BloodManager.Instance != null && BloodManager.Instance.IsEscapeReady))
             {
                 EscapeSystem.Instance?.ActivateRandomEscapeZone();
             }
 
-            // 2. 최대 혈액(200ml) 도달 시 흡혈 완료 및 이륙
             if (currentBlood >= maxBlood || (BloodManager.Instance != null && BloodManager.Instance.IsFull))
             {
                 OnSuckingCompleted();
             }
-            // 3. 구역 고갈 시 이륙
             else if (currentZoneMaxSuckAmount > 0f && currentZoneSuckedBlood >= currentZoneMaxSuckAmount)
             {
                 OnSuckingCompleted();
@@ -458,14 +458,10 @@ public class MosquitoController : MonoBehaviour
         UpdateAnimationState();
     }
 
-    /// <summary>
-    /// [수정] 정상적인 세션 종료 시 실제 빨아들인 피가 있을 때만 물린 자국을 생성합니다.
-    /// </summary>
     private void FinishBiteSession()
     {
         if (currentBitingZone != null)
         {
-            // 피를 최소 0.01ml 이상 빠는데 성공했을 때만 피부 자국 생성
             if (currentZoneSuckedBlood > 0f)
             {
                 currentBitingZone.RegisterBiteMark(transform.position);
@@ -480,9 +476,6 @@ public class MosquitoController : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// [신규] QTE 실패 또는 기습으로 피를 못 빨고 쫓겨날 때 자국 없이 세션을 즉시 중단합니다.
-    /// </summary>
     private void AbortBiteSession()
     {
         if (currentBitingZone != null)
@@ -492,9 +485,6 @@ public class MosquitoController : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// [신규] 구역 세션 트래킹 변수 세척
-    /// </summary>
     private void ClearBiteSessionData()
     {
         currentBitingZone = null;
@@ -506,7 +496,6 @@ public class MosquitoController : MonoBehaviour
     {
         float bloodRatio = 0f;
 
-        // BloodManager 단일 진실 공급원에서 현재 혈액 비중 계산
         if (BloodManager.Instance != null)
         {
             bloodRatio = Mathf.Clamp01(BloodManager.Instance.CurrentBlood / BloodManager.Instance.MaxTargetBlood);
@@ -582,21 +571,21 @@ public class MosquitoController : MonoBehaviour
         ExecuteDeathSequence();
     }
 
+    /// <summary>
+    /// 모기 개체의 사망 처리 진입점 (단일 책임: 모기 개체 상태 변경)
+    /// </summary>
     private void ExecuteDeathSequence()
     {
+        // [1] 중복 사망 방지 Guard Clause
         if (isDead) return;
 
         isDead = true;
         currentState = MosquitoState.Dead;
 
-        AudioManager.Instance?.StopMosquitoBuzz();
-        AudioManager.Instance?.PlaySFX(AudioManager.SFXType.GameOver);
-
-        BloodManager.Instance?.StopTimer();
-
-        StopAllCoroutines();
+        // [2] 불릿 타임 중 사망 시 TimeScale 원복 필수 (Time.timeScale = 1.0f)
         ResetTimeScale();
 
+        // [3] 물리 및 이동 중단 ($v = 0$)
         if (rb != null)
         {
             rb.linearVelocity = Vector2.zero;
@@ -604,33 +593,49 @@ public class MosquitoController : MonoBehaviour
             rb.simulated = false;
         }
 
-        if (playerInput != null) playerInput.enabled = false;
-        HumanAngerManager.Instance?.ResetAnger();
+        // [4] 사용자 입력 차단
+        if (playerInput != null)
+            playerInput.enabled = false;
 
+        // [5] 사운드 처리 (개체 단위 SFX)
+        AudioManager.Instance?.StopMosquitoBuzz();
+        AudioManager.Instance?.PlaySFX(AudioManager.SFXType.GameOver);
+
+        // [6] 모기 시각 연출 실행
+        StopAllCoroutines();
         StartCoroutine(DeathMotionRoutine());
+
+        // [7] 글로벌 관찰자들에게 사망 알림 전파 (Decoupling)
+        OnMosquitoDied?.Invoke();
     }
 
+    /// <summary>
+    /// 모기가 피격되어 찌그러지는 연출 코루틴
+    /// </summary>
     private IEnumerator DeathMotionRoutine()
     {
         if (animator != null) animator.enabled = false;
-        if (spriteRenderer != null && deathSprite != null) spriteRenderer.sprite = deathSprite;
+        if (spriteRenderer != null && deathSprite != null)
+            spriteRenderer.sprite = deathSprite;
 
         Vector3 baseScale = Vector3.one;
         float timer = 0f;
         float flattenDuration = 0.15f;
 
+        // X축 확대, Y축 축소를 통한 $Scale_{target} = (1.4 \cdot X, 0.4 \cdot Y)$ 변형 연출
         while (timer < flattenDuration)
         {
             timer += Time.deltaTime;
             float t = timer / flattenDuration;
-            transform.localScale = new Vector3(baseScale.x * Mathf.Lerp(1.0f, 1.4f, t), baseScale.y * Mathf.Lerp(1.0f, 0.4f, t), baseScale.z);
+            transform.localScale = new Vector3(
+                baseScale.x * Mathf.Lerp(1.0f, 1.4f, t),
+                baseScale.y * Mathf.Lerp(1.0f, 0.4f, t),
+                baseScale.z
+            );
             yield return null;
         }
 
         transform.localScale = new Vector3(baseScale.x * 1.4f, baseScale.y * 0.4f, baseScale.z);
-        yield return new WaitForSeconds(Mathf.Max(0f, 1.0f - flattenDuration));
-
-        OnGameOver?.Invoke();
     }
 
     public void RespawnMosquito(Vector3 spawnPosition)
@@ -746,12 +751,11 @@ public class MosquitoController : MonoBehaviour
             else
                 SkillCheckUI.Instance?.BeginSkillCheck(1.3f, OnDbdSkillCheckCompleted);
         }
-        else // QTE 실패 처리
+        else
         {
             AudioManager.Instance?.PlaySFX(AudioManager.SFXType.QteFail);
             HumanAngerManager.Instance?.TriggerAttack(transform.position);
 
-            // [수정] QTE 실패 시 피를 빨리 못했으므로 자국 없이 세션을 취소(Abort)합니다.
             AbortBiteSession();
 
             currentState = MosquitoState.Flying;

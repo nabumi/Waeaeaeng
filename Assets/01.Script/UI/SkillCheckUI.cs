@@ -65,14 +65,14 @@ public class SkillCheckUI : MonoBehaviour
 
     private void OnEnable()
     {
-        // [핵심 저결합 설계] 모기 사망/게임오버 이벤트를 구독하여 활성화 상태 관리
-        MosquitoController.OnGameOver += ForceCancelSkillCheck;
+        // [수정 완료] 최신화된 MosquitoController.OnMosquitoDied 이벤트를 구독
+        MosquitoController.OnMosquitoDied += ForceCancelSkillCheck;
     }
 
     private void OnDisable()
     {
-        // 메모리 누수 방지를 위한 이벤트 구독 해제
-        MosquitoController.OnGameOver -= ForceCancelSkillCheck;
+        // [수정 완료] 메모리 누수 방지를 위한 이벤트 구독 해제
+        MosquitoController.OnMosquitoDied -= ForceCancelSkillCheck;
     }
 
     /// <summary>
@@ -131,7 +131,7 @@ public class SkillCheckUI : MonoBehaviour
     {
         if (!isActive || isEvaluating) return;
 
-        // 시간 흐름에 따른 각도 증가: $\theta(t) = \theta_0 + \omega \cdot \Delta t$
+        // 시간 흐름에 따른 각도 증가 공식: $\theta(t) = \theta_0 + \omega \cdot \Delta t$
         currentNeedleAngle += currentSpeed * Time.deltaTime;
 
         if (currentNeedleAngle >= 360f)
@@ -146,6 +146,7 @@ public class SkillCheckUI : MonoBehaviour
     {
         if (markerRectTransform == null) return;
 
+        // 삼각함수를 이용한 원형 궤도 좌표 산출: $x = R \cdot \sin(\theta), y = R \cdot \cos(\theta)$
         float rad = angleDeg * Mathf.Deg2Rad;
         float x = trackRadius * Mathf.Sin(rad);
         float y = trackRadius * Mathf.Cos(rad);
@@ -197,11 +198,11 @@ public class SkillCheckUI : MonoBehaviour
     }
 
     /// <summary>
-    /// [핵심 버그 수정 메서드] 모기 사망(게임오버) 시 스킬체크를 즉시 강제 중단하고 잔상을 지웁니다.
+    /// 모기 사망(게임오버) 시 스킬체크를 즉시 강제 중단하고 UI 잔상을 제거합니다.
     /// </summary>
     public void ForceCancelSkillCheck()
     {
-        Debug.Log("<color=orange>[SkillCheckUI] 게임오버 신호 감지: 스킬체크 강제 중단 및 UI 비활성화</color>");
+        Debug.Log("<color=orange>[SkillCheckUI] 사망 신호 감지: 스킬체크 강제 중단 및 UI 비활성화</color>");
 
         // 1. 플래그 즉시 차단
         isActive = false;
@@ -220,7 +221,7 @@ public class SkillCheckUI : MonoBehaviour
             uiContainer.SetActive(false);
         }
 
-        // 4. 꼬인 콜백 참조 해제
+        // 4. 꼬인 콜백 참조 해제 (사망 후 콜백 실행 방지)
         onCompleteCallback = null;
     }
 }

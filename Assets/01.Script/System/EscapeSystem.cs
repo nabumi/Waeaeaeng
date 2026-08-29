@@ -3,24 +3,25 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// 흡혈 150ml 이상 달성 시 하이어라키에 배치된 8개 탈출 지점 중 1곳을 무작위로 선정하여 탈출구를 활성화하는 시스템
-/// (하이어라키의 Transform을 직접 드래그앤드롭하거나 'EscapePoints' 부모 오브젝트를 통해 정교하게 위치 지정 가능)
+/// 흡혈 150ml 이상 달성 시 인스펙터/하이어라키에 배치된 탈출 지점(Transform) 중 1곳을 무작위로 선정하여 탈출구를 활성화하는 시스템
+/// (하드코딩 좌표를 제거하고 씬의 Transform 데이터만 안전하게 추적하도록 개편된 버전입니다.)
 /// </summary>
 public class EscapeSystem : MonoBehaviour
 {
     private static EscapeSystem instance;
+    private static bool isApplicationQuitting = false;
+
+    public static bool HasInstance => instance != null && !isApplicationQuitting;
+
     public static EscapeSystem Instance
     {
         get
         {
+            if (isApplicationQuitting) return null;
+
             if (instance == null)
             {
                 instance = FindAnyObjectByType<EscapeSystem>();
-                if (instance == null)
-                {
-                    var go = new GameObject("[EscapeSystem]");
-                    instance = go.AddComponent<EscapeSystem>();
-                }
             }
             return instance;
         }
@@ -29,39 +30,24 @@ public class EscapeSystem : MonoBehaviour
     // 승리/탈출 성공 이벤트 (GameManager, UI 등에서 구독)
     public static event Action OnGameClear;
 
-    [Header("탈출 지점 Transform 설정 (하이어라키에서 지정)")]
-    [Tooltip("하이어라키에 배치된 8개의 탈출 지점 Transform 목록 (비어있으면 EscapePoints 부모를 탐색하거나 자동 생성)")]
-    [SerializeField] private Transform[] escapePointTransforms = new Transform[8];
+    [Header("탈출 지점 Transform 설정 (인스펙터 할당)")]
+    [Tooltip("하이어라키에 배치된 탈출 지점 Transform 목록 (비어있을 경우 부모 오브젝트 탐색)")]
+    [SerializeField] private Transform[] escapePointTransforms;
 
-    [Tooltip("8개 탈출 지점을 자식으로 둔 부모 Transform (선택 사항)")]
+    [Tooltip("탈출 지점들을 자식으로 둔 부모 Transform (선택 사항)")]
     [SerializeField] private Transform escapePointsParent;
 
     [Header("탈출 감지 설정")]
-    [Tooltip("탈출 감지 반경 (도달 인정 거리)")]
+    [Tooltip("탈출 감지 반경 (도달 인정 거리 - m 단위)")]
     [SerializeField] private float escapeTriggerRadius = 1.5f;
 
-    [Header("방향 지시계 UI")]
+    [Header("시각 연출 및 UI")]
     [SerializeField] private EscapeIndicatorUI indicatorUI;
 
-    // 기본 8방향 안전 외곽 기본 좌표 (사람 몸체를 완전히 피한 방 외곽 모서리/창문 위치)
-    private static readonly Vector2[] DefaultSafeOffsets = new Vector2[]
-    {
-        new Vector2(0f, 4.3f),       // 1. 북 (창문/환풍구)
-        new Vector2(6.5f, 4.0f),     // 2. 북동 (우측 상단 구석)
-        new Vector2(7.2f, 0f),       // 3. 동 (우측 문틈)
-        new Vector2(6.5f, -4.0f),    // 4. 남동 (우측 하단 구석)
-        new Vector2(0f, -4.3f),      // 5. 남 (하단 침대 틈)
-        new Vector2(-6.5f, -4.0f),   // 6. 남서 (좌측 하단 구석)
-        new Vector2(-7.2f, 0f),      // 7. 서 (좌측 벽 틈)
-        new Vector2(-6.5f, 4.0f)     // 8. 북서 (좌측 상단 구석)
-    };
+    [Tooltip("탈출 지점에 생성될 마커 스프라이트 (미지정 시 기본 백색 원 연출)")]
+    [SerializeField] private Sprite escapeMarkerSprite;
 
-    private static readonly string[] PointNames = new string[]
-    {
-        "1_북쪽_창문", "2_북동_우측상단", "3_동쪽_문틈", "4_남동_우측하단",
-        "5_남쪽_침대밑", "6_남서_좌측하단", "7_서쪽_벽틈", "8_북서_좌측상단"
-    };
-
+    // 내부 상태 변수
     private Vector2 activeEscapePosition;
     private bool isEscapeActive = false;
     private bool isEscaped = false;
@@ -69,18 +55,29 @@ public class EscapeSystem : MonoBehaviour
     private GameObject visualEscapeMarker;
     private string currentEscapePointName = "";
 
+    // 최적화를 위한 제곱 거리 변수 ($r^2$)
+    private float sqrTriggerRadius;
+
     public Vector2 ActiveEscapePosition => activeEscapePosition;
     public bool IsEscapeActive => isEscapeActive;
     public string CurrentEscapePointName => currentEscapePointName;
 
     private void Awake()
     {
-        if (instance == null) instance = this;
+        isApplicationQuitting = false;
+
+        if (instance == null)
+        {
+            instance = this;
+        }
         else if (instance != this)
         {
             Destroy(gameObject);
             return;
         }
+
+        // 제곱 거리 연산 캐싱 ($r_{\text{sqr}} = r^2$)
+        sqrTriggerRadius = escapeTriggerRadius * escapeTriggerRadius;
 
         EnsureEscapePoints();
     }
@@ -88,11 +85,27 @@ public class EscapeSystem : MonoBehaviour
     private void OnEnable()
     {
         BloodManager.OnFullBelly += ActivateRandomEscapeZone;
+
+        if (BloodManager.HasInstance)
+        {
+            BloodManager.Instance.OnBloodAmountChanged += CheckBloodStateOnUpdate;
+
+            // 씬 진입 시 이미 탈출 조건($V_{\text{current}} \ge 150\text{ml}$)을 만족한 상태라면 즉시 활성화
+            if (BloodManager.Instance.IsEscapeReady && !isEscapeActive && !isEscaped)
+            {
+                ActivateRandomEscapeZone();
+            }
+        }
     }
 
     private void OnDisable()
     {
         BloodManager.OnFullBelly -= ActivateRandomEscapeZone;
+
+        if (BloodManager.HasInstance)
+        {
+            BloodManager.Instance.OnBloodAmountChanged -= CheckBloodStateOnUpdate;
+        }
     }
 
     private void Start()
@@ -105,14 +118,38 @@ public class EscapeSystem : MonoBehaviour
         FindPlayer();
     }
 
+    private void OnApplicationQuit()
+    {
+        isApplicationQuitting = true;
+    }
+
+    private void OnDestroy()
+    {
+        if (instance == this)
+        {
+            instance = null;
+        }
+    }
+
     /// <summary>
-    /// 하이어라키의 8개 탈출 지점 Transform 수집 및 부재 시 자동 구성
+    /// 실시간 혈액 변화 감시 후 150ml 도달 즉시 탈출구 개방
+    /// </summary>
+    private void CheckBloodStateOnUpdate(float currentBlood, float maxBlood)
+    {
+        if (!isEscapeActive && !isEscaped && currentBlood >= 150f)
+        {
+            ActivateRandomEscapeZone();
+        }
+    }
+
+    /// <summary>
+    /// 인스펙터 및 하이어라키의 유효한 Transform만 필터링하여 수집
     /// </summary>
     public void EnsureEscapePoints()
     {
         var validList = new List<Transform>();
 
-        // 1. 직접 인스펙터에 등록된 배열 검사
+        // 1. 인스펙터 배열에 등록된 Transform 중 Null이 아닌 항목 수집
         if (escapePointTransforms != null && escapePointTransforms.Length > 0)
         {
             foreach (var t in escapePointTransforms)
@@ -121,16 +158,17 @@ public class EscapeSystem : MonoBehaviour
             }
         }
 
-        // 2. 부모 오브젝트(escapePointsParent)가 지정되어 있으면 자식 수집
+        // 2. 배열이 비어있고 부모 Transform이 지정된 경우 자식 수집
         if (validList.Count == 0 && escapePointsParent != null)
         {
             for (int i = 0; i < escapePointsParent.childCount; i++)
             {
-                validList.Add(escapePointsParent.GetChild(i));
+                var child = escapePointsParent.GetChild(i);
+                if (child != null) validList.Add(child);
             }
         }
 
-        // 3. 씬에서 "EscapePoints" 이름의 부모 오브젝트 탐색
+        // 3. 씬에서 "EscapePoints" 부모 탐색
         if (validList.Count == 0)
         {
             var foundParent = GameObject.Find("EscapePoints") ?? GameObject.Find("[EscapePoints]");
@@ -139,26 +177,17 @@ public class EscapeSystem : MonoBehaviour
                 escapePointsParent = foundParent.transform;
                 for (int i = 0; i < foundParent.transform.childCount; i++)
                 {
-                    validList.Add(foundParent.transform.GetChild(i));
+                    var child = foundParent.transform.GetChild(i);
+                    if (child != null) validList.Add(child);
                 }
             }
         }
 
-        // 4. 그래도 없으면 하이어라키에 사용자가 위치를 편집할 수 있도록 8개 지점을 자동 생성!
+        // 4. 유효한 Transform이 0개일 경우 디버그 에러 가이드
         if (validList.Count == 0)
         {
-            var parentObj = new GameObject("EscapePoints");
-            escapePointsParent = parentObj.transform;
-
-            for (int i = 0; i < DefaultSafeOffsets.Length; i++)
-            {
-                var pointGo = new GameObject(PointNames[i]);
-                pointGo.transform.SetParent(escapePointsParent, false);
-                pointGo.transform.position = new Vector3(DefaultSafeOffsets[i].x, DefaultSafeOffsets[i].y, 0f);
-                validList.Add(pointGo.transform);
-            }
-
-            Debug.LogWarning("<color=cyan>[EscapeSystem] 하이어라키에 'EscapePoints' (8개 탈출 지점)을 자동 생성했습니다. 씬 뷰에서 자유롭게 위치를 이동하실 수 있습니다.</color>");
+            Debug.LogError("<color=red>[EscapeSystem] 씬 및 인스펙터에 등록된 탈출 지점(Transform)이 전혀 없습니다! EscapePoints 오브젝트를 확인해 주세요.</color>");
+            return;
         }
 
         escapePointTransforms = validList.ToArray();
@@ -184,20 +213,19 @@ public class EscapeSystem : MonoBehaviour
     {
         if (!isEscapeActive || isEscaped) return;
 
-        if (playerTransform == null)
-        {
-            FindPlayer();
-            if (playerTransform == null) return;
-        }
+        if (playerTransform == null) return;
 
-        // 플레이어 탈출 구역 도달 감지
-        float dist = Vector2.Distance(playerTransform.position, activeEscapePosition);
-        if (dist <= escapeTriggerRadius)
+        // [최적화] sqrMagnitude를 이용한 빠른 거리 측정 연산
+        // 수식: $d^2 = (x_2 - x_1)^2 + (y_2 - y_1)^2 \le r^2$
+        Vector2 playerPos = playerTransform.position;
+        float sqrDistance = (playerPos - activeEscapePosition).sqrMagnitude;
+
+        if (sqrDistance <= sqrTriggerRadius)
         {
             TriggerEscapeSuccess();
         }
 
-        // 비주얼 마커 부드러운 펄스 및 회전 효과
+        // 마커 맥박(Pulse) 및 회전 효과
         if (visualEscapeMarker != null)
         {
             float pulse = 0.35f + 0.04f * Mathf.Sin(Time.time * 5f);
@@ -207,7 +235,7 @@ public class EscapeSystem : MonoBehaviour
     }
 
     /// <summary>
-    /// 150ml 이상 흡혈 시 하이어라키의 8개 탈출 지점 중 1곳을 무작위로 선택하여 탈출구 활성화
+    /// 수집된 Transform 중 1곳을 무작위로 추첨하여 탈출구로 가동
     /// </summary>
     public void ActivateRandomEscapeZone()
     {
@@ -217,30 +245,27 @@ public class EscapeSystem : MonoBehaviour
 
         if (escapePointTransforms == null || escapePointTransforms.Length == 0)
         {
-            Debug.LogError("<color=red>[EscapeSystem] 탈출 지점 Transform이 존재하지 않습니다!</color>");
+            Debug.LogError("<color=red>[EscapeSystem] 활성화할 탈출 지점 Transform이 존재하지 않습니다!</color>");
             return;
         }
 
+        // 유효한 Transform 목록 중 Random Pick
         int randomIndex = UnityEngine.Random.Range(0, escapePointTransforms.Length);
         Transform chosenTransform = escapePointTransforms[randomIndex];
 
-        if (chosenTransform != null)
+        if (chosenTransform == null)
         {
-            activeEscapePosition = chosenTransform.position;
-            currentEscapePointName = chosenTransform.name;
+            Debug.LogError("<color=red>[EscapeSystem] 선택된 탈출 지점 Transform이 Null입니다!</color>");
+            return;
         }
-        else
-        {
-            activeEscapePosition = DefaultSafeOffsets[randomIndex % DefaultSafeOffsets.Length];
-            currentEscapePointName = PointNames[randomIndex % PointNames.Length];
-        }
+
+        activeEscapePosition = chosenTransform.position;
+        currentEscapePointName = chosenTransform.name;
 
         isEscapeActive = true;
         isEscaped = false;
 
-        Debug.LogWarning("<color=cyan>==================================================</color>");
-        Debug.LogWarning($"<color=cyan>[탈출 개시!] 150ml 이상 만복 달성! 탈출 지점: {currentEscapePointName} (위치: {activeEscapePosition})</color>");
-        Debug.LogWarning("<color=cyan>==================================================</color>");
+        Debug.LogWarning($"<color=cyan>[탈출 개시!] 만복 달성! 선정된 탈출 지점: {currentEscapePointName} ({activeEscapePosition})</color>");
 
         AudioManager.Instance?.PlaySFX(AudioManager.SFXType.EscapeReady);
 
@@ -262,14 +287,15 @@ public class EscapeSystem : MonoBehaviour
         visualEscapeMarker.transform.localScale = new Vector3(0.35f, 0.35f, 1f);
 
         var sr = visualEscapeMarker.AddComponent<SpriteRenderer>();
-        var circleSprites = Resources.LoadAll<Sprite>("Sprites/굵은원");
-        if (circleSprites != null && circleSprites.Length > 0)
+
+        if (escapeMarkerSprite != null)
         {
-            sr.sprite = circleSprites[0];
+            sr.sprite = escapeMarkerSprite;
         }
         else
         {
-            sr.sprite = Resources.Load<Sprite>("Sprites/원_01_흰색");
+            Texture2D tex = Texture2D.whiteTexture;
+            sr.sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));
         }
 
         sr.color = new Color(0.1f, 1.0f, 0.4f, 0.75f);
@@ -292,9 +318,7 @@ public class EscapeSystem : MonoBehaviour
             Destroy(visualEscapeMarker);
         }
 
-        Debug.LogWarning("<color=green>==================================================</color>");
-        Debug.LogWarning($"<color=green>[GAME CLEAR] 모기가 '{currentEscapePointName}' 탈출구를 통해 무사히 탈출했습니다!</color>");
-        Debug.LogWarning("<color=green>==================================================</color>");
+        Debug.LogWarning($"<color=green>[GAME CLEAR] 모기가 '{currentEscapePointName}' 위치로 무사히 탈출했습니다!</color>");
 
         BloodManager.Instance?.StopTimer();
 
@@ -303,7 +327,7 @@ public class EscapeSystem : MonoBehaviour
 
     private void OnDrawGizmos()
     {
-        // 씬 뷰 에디터에서 8개 탈출 지점의 위치를 초록색 구체와 라벨로 시각화
+        // 에디터 씬 뷰에서 설정된 Transform 위치들을 기즈모로 시각화
         if (escapePointTransforms != null)
         {
             for (int i = 0; i < escapePointTransforms.Length; i++)
@@ -311,7 +335,10 @@ public class EscapeSystem : MonoBehaviour
                 var t = escapePointTransforms[i];
                 if (t == null) continue;
 
-                Gizmos.color = isEscapeActive && (Vector2)t.position == activeEscapePosition ? Color.yellow : new Color(0.2f, 1f, 0.4f, 0.6f);
+                Gizmos.color = isEscapeActive && (Vector2)t.position == activeEscapePosition
+                    ? Color.yellow
+                    : new Color(0.2f, 1f, 0.4f, 0.6f);
+
                 Gizmos.DrawWireSphere(t.position, escapeTriggerRadius);
                 Gizmos.DrawSphere(t.position, 0.2f);
             }
