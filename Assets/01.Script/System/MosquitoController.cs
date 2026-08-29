@@ -35,13 +35,13 @@ public class MosquitoController : MonoBehaviour
 
     [Header("대시 및 회피(불릿 타임) 설정")]
     [Tooltip("대시 상태일 때 이동 속도 배율")]
-    [SerializeField] private float dashSpeedMultiplier = 2.5f;
-    [Tooltip("대시 유지 시간 (실시간 초 기준)")]
-    [SerializeField] private float dashDuration = 0.25f;
+    [SerializeField] private float dashSpeedMultiplier = 2.8f;
+    [Tooltip("대시 및 슬로우모션 유지 시간 (실시간 초 기준)")]
+    [SerializeField] private float dashDuration = 0.35f;
     [Tooltip("대시 시 적용할 주변 시간 속도 (0.2 = 주변 시간이 5배 느려짐)")]
     [SerializeField] private float slowTimeScale = 0.2f;
     [Tooltip("대시 스킬 쿨타임 (실시간 초 기준)")]
-    [SerializeField] private float dashCooldown = 1.0f;
+    [SerializeField] private float dashCooldown = 0.8f;
 
     private bool isDashing = false;
     public bool IsDashing => isDashing;
@@ -210,6 +210,8 @@ public class MosquitoController : MonoBehaviour
     {
         if (isDead || currentState == MosquitoState.Dead) return;
 
+        UpdateSpriteFacing();
+
         if (currentState == MosquitoState.Flying)
         {
             HandleKeyboardDashCheck();
@@ -219,6 +221,31 @@ public class MosquitoController : MonoBehaviour
         {
             ProcessBloodSucking();
             EvaluateSuckingDangerAttack();
+        }
+    }
+
+    /// <summary>
+    /// 이동 입력 방향(X축)에 맞춰 모기 스프라이트 및 시각 요소를 좌우 반전합니다.
+    /// </summary>
+    private void UpdateSpriteFacing()
+    {
+        if (isDead || currentState == MosquitoState.Dead) return;
+
+        if (moveInput.x > 0.05f)
+        {
+            // 우측 이동: 스프라이트 기본 방향 (flipX = false)
+            if (spriteRenderer != null && spriteRenderer.flipX)
+            {
+                spriteRenderer.flipX = false;
+            }
+        }
+        else if (moveInput.x < -0.05f)
+        {
+            // 좌측 이동: 스프라이트 좌측 반전 (flipX = true)
+            if (spriteRenderer != null && !spriteRenderer.flipX)
+            {
+                spriteRenderer.flipX = true;
+            }
         }
     }
 
@@ -252,7 +279,8 @@ public class MosquitoController : MonoBehaviour
 
     public void PerformDash()
     {
-        if (Time.unscaledTime < lastDashTime + dashCooldown) return;
+        if (isDead || currentState != MosquitoState.Flying || isDashing) return;
+        if (Time.unscaledTime - lastDashTime < dashCooldown) return;
 
         lastDashTime = Time.unscaledTime;
         currentDashDirection = (moveInput != Vector2.zero) ? moveInput.normalized : lastNonZeroMoveDirection;
@@ -263,16 +291,20 @@ public class MosquitoController : MonoBehaviour
     private IEnumerator DashRoutine()
     {
         isDashing = true;
+
+        // 1. 주변 시간을 0.2배로 감속 (슬로우모션 발동)
         Time.timeScale = slowTimeScale;
         Time.fixedDeltaTime = 0.02f * Time.timeScale;
 
         AudioManager.Instance?.PlaySFX(AudioManager.SFXType.Dash);
         UpdateAnimationState();
 
+        // 2. 실시간 0.35초 동안 슬로우모션 대시 유지
         yield return new WaitForSecondsRealtime(dashDuration);
 
-        ResetTimeScale();
+        // 3. 정상 시간 복구
         isDashing = false;
+        ResetTimeScale();
         UpdateAnimationState();
     }
 
