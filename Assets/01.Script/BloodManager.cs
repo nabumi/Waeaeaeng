@@ -7,14 +7,17 @@ using UnityEngine;
 public class BloodManager : MonoBehaviour
 {
     private static BloodManager instance;
+    private static bool isQuitting = false;
+
     public static BloodManager Instance
     {
         get
         {
+            if (isQuitting) return null;
             if (instance == null)
             {
                 instance = FindAnyObjectByType<BloodManager>();
-                if (instance == null)
+                if (instance == null && Application.isPlaying)
                 {
                     var go = new GameObject("[BloodManager]");
                     instance = go.AddComponent<BloodManager>();
@@ -71,6 +74,16 @@ public class BloodManager : MonoBehaviour
         }
 
         ResetBlood();
+    }
+
+    private void OnDestroy()
+    {
+        if (instance == this) instance = null;
+    }
+
+    private void OnApplicationQuit()
+    {
+        isQuitting = true;
     }
 
     private void Start()

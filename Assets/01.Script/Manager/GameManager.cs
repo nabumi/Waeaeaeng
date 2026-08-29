@@ -124,6 +124,9 @@ public class GameManager : MonoBehaviour
                 gameclearObj.SetActive(false);
             }
         }
+
+        // 2. 상단 HUD (타이머 및 흡혈량 카운터) 컨트롤러 연결 보장
+        IngameHUDController.EnsureHUDExists();
     }
 
     private void Update()

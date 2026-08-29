@@ -9,6 +9,7 @@ public static class RefreshGameClearAsset
     static RefreshGameClearAsset()
     {
         EditorApplication.delayCall += Refresh;
+        EditorApplication.delayCall += FixHUD;
     }
 
     [MenuItem("Tools/Fix GameClear Asset")]
@@ -60,8 +61,23 @@ public static class RefreshGameClearAsset
                 }
             }
         }
+    }
 
-        Debug.LogWarning("<color=green>[GameClear] ??酉?諛??섏씠?대씪???먯뀑 ?덈줈怨좎묠 諛??ㅽ봽?쇱씠???곌껐 ?꾨즺!</color>");
+    [MenuItem("Tools/Fix Ingame HUD")]
+    public static void FixHUD()
+    {
+        var sceneCanvases = Resources.FindObjectsOfTypeAll<Canvas>();
+        foreach (var c in sceneCanvases)
+        {
+            if (c.renderMode == RenderMode.WorldSpace) continue;
+            var hud = c.GetComponent<IngameHUDController>() ?? c.gameObject.AddComponent<IngameHUDController>();
+            if (hud != null)
+            {
+                hud.BindComponents();
+                EditorUtility.SetDirty(hud);
+                EditorUtility.SetDirty(c.gameObject);
+            }
+        }
     }
 }
 #endif
