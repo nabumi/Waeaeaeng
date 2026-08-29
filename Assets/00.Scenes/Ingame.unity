@@ -580,7 +580,8 @@ GameObject:
   - component: {fileID: 636591783}
   - component: {fileID: 636591781}
   - component: {fileID: 636591784}
-  m_Layer: 5
+  - component: {fileID: 636591785}
+  m_Layer: 6
   m_Name: Player
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -717,6 +718,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MosquitoController
   currentState: 0
+  isDead: 0
   moveSpeed: 10
   hoverAmplitude: 1
   hoverFrequency: 1
@@ -838,6 +840,42 @@ MonoBehaviour:
   headAnchor: {fileID: 182456902}
   maxDangerDistance: 2
   minDangerDistance: 0.5
+--- !u!58 &636591785
+CircleCollider2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 636591776}
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Density: 1
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_ForceSendLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ForceReceiveLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ContactCaptureLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_CallbackLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_IsTrigger: 0
+  m_UsedByEffector: 0
+  m_CompositeOperation: 0
+  m_CompositeOrder: 0
+  m_Offset: {x: 0, y: 0}
+  m_Radius: 0.75
 --- !u!1 &735045411
 GameObject:
   m_ObjectHideFlags: 0
@@ -1124,6 +1162,7 @@ GameObject:
   - component: {fileID: 1090765285}
   - component: {fileID: 1090765284}
   - component: {fileID: 1090765287}
+  - component: {fileID: 1090765288}
   m_Layer: 0
   m_Name: _GameManager
   m_TagString: Untagged
@@ -1184,14 +1223,27 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HumanAngerManager
   targetCanvas: {fileID: 757451461}
-  handAttackUIPrefab: {fileID: 7994617563585101885, guid: 8bd01b14b9793f34791d5e21dd88b52d, type: 3}
+  handAttackUIPrefab: {fileID: 4432272963628783209, guid: 34b4954aa3d316c4eac08f9a73cf6c01, type: 3}
   baseFillDuration: 1.2
   minFillDuration: 0.35
   attackRadius: 1.2
   mosquitoLayer:
     serializedVersion: 2
-    m_Bits: 32
+    m_Bits: 64
   angerPerDodge: 0.25
+--- !u!114 &1090765288
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1090765283}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b343036eb82a2a84baf97adbb28a84e1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GameManager
+  isGameOver: 0
 --- !u!1 &1237703961
 GameObject:
   m_ObjectHideFlags: 0
