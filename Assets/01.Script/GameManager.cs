@@ -85,8 +85,34 @@ public class GameManager : MonoBehaviour
         isGameOver = true;
 
         Debug.LogWarning("<color=yellow>==================================================</color>");
-        Debug.LogWarning("<color=yellow>[GAME OVER] 모기가 사망했습니다! 'R' 키를 누르면 리셋됩니다.</color>");
+        Debug.LogWarning("<color=yellow>[GAME OVER] 모기 사망 수신 -> 게임오버 결과창 활성화 ('R' 키 재시작 가능)</color>");
         Debug.LogWarning("<color=yellow>==================================================</color>");
+
+        // 씬 내 gameover UI 오브젝트를 찾아 활성화 및 페이드인
+        GameObject gameoverObj = null;
+        var canvas = FindAnyObjectByType<Canvas>();
+        if (canvas != null)
+        {
+            var t = canvas.transform.Find("gameover");
+            if (t != null) gameoverObj = t.gameObject;
+        }
+        if (gameoverObj == null)
+        {
+            gameoverObj = GameObject.Find("gameover");
+        }
+
+        if (gameoverObj != null)
+        {
+            gameoverObj.SetActive(true);
+            gameoverObj.transform.SetAsLastSibling();
+
+            var controller = gameoverObj.GetComponent<GameOverUIController>() ?? gameoverObj.AddComponent<GameOverUIController>();
+            controller.ShowGameOverUI();
+        }
+        else
+        {
+            Debug.LogError("<color=red>[GameManager] 씬에서 'gameover' UI 오브젝트를 찾을 수 없습니다!</color>");
+        }
     }
 
     /// <summary>

@@ -68,6 +68,13 @@ public class GameOverUIController : MonoBehaviour
     public void ShowGameOverUI()
     {
         gameObject.SetActive(true);
+        transform.SetAsLastSibling();
+
+        // 자식 오브젝트 활성화 보장
+        for (int i = 0; i < transform.childCount; i++)
+        {
+            transform.GetChild(i).gameObject.SetActive(true);
+        }
 
         if (fadeInCoroutine != null)
         {
@@ -98,6 +105,7 @@ public class GameOverUIController : MonoBehaviour
 
         canvasGroup.alpha = 1.0f;
         canvasGroup.interactable = true;
+        Debug.Log("<color=green>[GameOverUIController] 게임오버 결과창 페이드인 완료</color>");
     }
 
     public void RestartGame()
