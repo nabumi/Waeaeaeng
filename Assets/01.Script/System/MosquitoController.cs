@@ -122,6 +122,11 @@ public class MosquitoController : MonoBehaviour
         spriteRenderer = GetComponentInChildren<SpriteRenderer>() ?? GetComponent<SpriteRenderer>();
         rb.gravityScale = 0f;
 
+        if (spriteRenderer != null)
+        {
+            spriteRenderer.sortingOrder = 10; // 물린 자국(Order 1) 위에 렌더링되어 가려지지 않음!
+        }
+
         if (deathSprite == null)
         {
             deathSprite = Resources.Load<Sprite>("Sprites/Mosquito_death");
