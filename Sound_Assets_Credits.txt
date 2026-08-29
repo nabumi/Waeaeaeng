@@ -1,0 +1,128 @@
+﻿================================================================================
+                    [Waeaeaeng] 프로젝트 오디오 에셋 출처 및 명세서
+================================================================================
+
+작성일자: 2026-08-30
+프로젝트: Waeaeaeng (모기 흡혈 잠입 액션 게임)
+엔진 버전: Unity 6 (6000.5.10f1)
+
+--------------------------------------------------------------------------------
+1. 배경음악 (BGM)
+--------------------------------------------------------------------------------
+[1] lobbybgm.mp3
+  - 게임 내 용도: 로비 및 타이틀 화면 배경음악
+  - 저장 경로: 
+    * Assets/Resources/Audio/lobbybgm.mp3
+    * Assets/02.Resource/lobbybgm.mp3
+  - 출처 / 저작권: Pixabay / Freesound 무료 음원 (Royalty-Free)
+  - 호출 코드: AudioManager.Instance.PlayLobbyBGM()
+
+[2] bgm_ingame.wav
+  - 게임 내 용도: 인게임 본 플레이 메인 배경음악
+  - 저장 경로: 
+    * Assets/Resources/Audio/bgm_ingame.wav
+    * Assets/02.Resource/Audio/bgm_ingame.wav
+  - 출처 / 저작권: Royalty-Free BGM Library
+  - 호출 코드: AudioManager.Instance.PlayInGameBGM()
+
+
+--------------------------------------------------------------------------------
+2. 환경음 및 지속 효과음 (Loop SFX)
+--------------------------------------------------------------------------------
+[3] freesound_community-single-mosquito-buzz-69360.mp3
+  - 게임 내 용도: 인게임 모기 비행 및 날갯짓 루프 효과음
+  - 저장 경로: 
+    * Assets/Resources/Audio/freesound_community-single-mosquito-buzz-69360.mp3
+    * Assets/02.Resource/freesound_community-single-mosquito-buzz-69360.mp3
+  - 출처 / 저작권: Freesound (https://freesound.org/)
+    * 원작자: freesound_community
+    * 사운드 ID: 69360 (Single Mosquito Buzz)
+    * 라이선스: Creative Commons 0 (CC0 Public Domain)
+  - 호출 코드: AudioManager.Instance.StartMosquitoBuzz()
+
+[4] lobbymoskito.mp3
+  - 게임 내 용도: 로비 타이틀 화면 모기 간헐적 날갯짓 효과음
+  - 저장 경로: 
+    * Assets/Resources/Audio/lobbymoskito.mp3
+    * Assets/02.Resource/lobbymoskito.mp3
+  - 출처 / 저작권: Freesound 무료 효과음 라이브러리
+  - 호출 코드: amosquitoLobbysound.cs (Title.unity 씬 오디오 소스)
+
+
+--------------------------------------------------------------------------------
+3. 인게임 플레이 효과음 (SFX)
+--------------------------------------------------------------------------------
+[5] alex_jauk-slap-237622.mp3
+  - 게임 내 용도: 인간 손바닥 강타 (Slap) 타격 효과음
+  - 저장 경로: 
+    * Assets/Resources/Audio/alex_jauk-slap-237622.mp3
+    * Assets/02.Resource/alex_jauk-slap-237622.mp3
+  - 출처 / 저작권: Pixabay (https://pixabay.com/)
+    * 원작자: alex_jauk
+    * 사운드 ID: 237622 (Slap Effect)
+    * 라이선스: Pixabay Content License (상업적/비상업적 무료 사용 가능)
+  - 호출 코드: HandAttackUIController.cs -> AudioManager.SFXType.Slap
+
+[6] sfx_dash.wav
+  - 게임 내 용도: 모기 대시(회피/급가속) 바람 가르는 소리
+  - 저장 경로: Assets/Resources/Audio/sfx_dash.wav
+  - 출처 / 저작권: Royalty-Free Game SFX Library
+  - 호출 코드: MosquitoController.cs -> AudioManager.SFXType.Dash
+
+[7] sfx_blood_suck.wav
+  - 게임 내 용도: 흡혈 진행 중 꼴깍 효과음
+  - 저장 경로: 
+    * Assets/Resources/Audio/sfx_blood_suck.wav
+    * Assets/02.Resource/Audio/sfx_blood_suck.wav
+  - 출처 / 저작권: Royalty-Free Game SFX Library
+  - 호출 코드: MosquitoController.cs -> AudioManager.SFXType.BloodSuck
+
+[8] sfx_qte_great.wav
+  - 게임 내 용도: 흡혈 QTE 미니게임 'Great' 타이밍 성공 효과음
+  - 저장 경로: 
+    * Assets/Resources/Audio/sfx_qte_great.wav
+    * Assets/02.Resource/Audio/sfx_qte_great.wav
+  - 출처 / 저작권: Royalty-Free UI/SFX Library
+  - 호출 코드: MosquitoController.cs -> AudioManager.SFXType.QteGreat
+
+[9] sfx_qte_success.wav
+  - 게임 내 용도: 흡혈 QTE 미니게임 'Success' 일반 성공 효과음
+  - 저장 경로: 
+    * Assets/Resources/Audio/sfx_qte_success.wav
+    * Assets/02.Resource/Audio/sfx_qte_success.wav
+  - 출처 / 저작권: Royalty-Free UI/SFX Library
+  - 호출 코드: MosquitoController.cs -> AudioManager.SFXType.QteSuccess
+
+[10] sfx_qte_fail.wav
+  - 게임 내 용도: 흡혈 QTE 미니게임 'Fail' 실패 부저음
+  - 저장 경로: 
+    * Assets/Resources/Audio/sfx_qte_fail.wav
+    * Assets/02.Resource/Audio/sfx_qte_fail.wav
+  - 출처 / 저작권: Royalty-Free UI/SFX Library
+  - 호출 코드: MosquitoController.cs -> AudioManager.SFXType.QteFail
+
+[11] sfx_escape_ready.wav
+  - 게임 내 용도: 목표 흡혈량 100% 달성 및 탈출구 개방 알림음
+  - 저장 경로: 
+    * Assets/Resources/Audio/sfx_escape_ready.wav
+    * Assets/02.Resource/Audio/sfx_escape_ready.wav
+  - 출처 / 저작권: Royalty-Free Game SFX Library
+  - 호출 코드: EscapeSystem.cs -> AudioManager.SFXType.EscapeReady
+
+[12] sfx_victory.wav
+  - 게임 내 용도: 방 탈출 성공 및 게임 클리어 팡파레
+  - 저장 경로: 
+    * Assets/Resources/Audio/sfx_victory.wav
+    * Assets/02.Resource/Audio/sfx_victory.wav
+  - 출처 / 저작권: Royalty-Free Game SFX Library
+  - 호출 코드: GameClearUIController.cs -> AudioManager.SFXType.Victory
+
+[13] sfx_gameover.wav
+  - 게임 내 용도: 모기 사망 및 게임 오버 효과음
+  - 저장 경로: 
+    * Assets/Resources/Audio/sfx_gameover.wav
+    * Assets/02.Resource/Audio/sfx_gameover.wav
+  - 출처 / 저작권: Royalty-Free Game SFX Library
+  - 호출 코드: MosquitoController.cs -> AudioManager.SFXType.GameOver
+
+================================================================================

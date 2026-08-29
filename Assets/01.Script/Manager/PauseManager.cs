@@ -4,18 +4,28 @@ using UnityEngine.InputSystem;
 public class PauseManager : MonoBehaviour
 {
     [SerializeField] private GameObject pauseMenuUI;
-    private bool isPaused = false;
+
 
     // ActionMap: UI -> Pause (Button: ESC)
     public void OnPause(InputAction.CallbackContext context)
     {
         if (!context.performed) return;
-
-        isPaused = !isPaused;
-        pauseMenuUI.SetActive(isPaused);
-
-        // 게임 일시정지 처리
-        Time.timeScale = isPaused ? 0f : 1f;
-        Debug.Log(isPaused ? "게임 일시정지" : "게임 재개");
+        TogglePause();
     }
-}
+
+    public void TogglePause()
+    {
+        if (GameManager.Instance != null && GameManager.Instance.CurrentState != GameManager.GameState.Playing) return;
+
+        if (OptionUIController.Instance != null)
+        {
+            OptionUIController.Instance.TogglePause();
+        }
+        else if (pauseMenuUI != null)
+        {
+            bool isPaused = !pauseMenuUI.activeSelf;
+            pauseMenuUI.SetActive(isPaused);
+            Time.timeScale = isPaused ? 0f : 1f;
+        }
+    }
+}

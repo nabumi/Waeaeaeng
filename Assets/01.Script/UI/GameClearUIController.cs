@@ -117,34 +117,12 @@ public class GameClearUIController : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// 안전한 스프라이트 배정 (Inspector 지정 우선 -> Resources 안전 로드)
-    /// </summary>
     private void EnsureBackgroundSprite()
     {
-        if (backgroundImage == null)
+        if (backgroundImage != null && clearSprite != null)
         {
-            var t = FindChildRecursive(transform, "Image", "Background", "배경");
-            if (t != null) backgroundImage = t.GetComponent<Image>();
-        }
-
-        if (backgroundImage != null)
-        {
-            if (clearSprite != null)
-            {
-                backgroundImage.sprite = clearSprite;
-                backgroundImage.color = Color.white;
-                return;
-            }
-
-            // Resources 폴백 (실제 빌드 환경에서 가장 안전한 로딩 방식)
-            var resSprite = Resources.Load<Sprite>("ui/gameclear") ?? Resources.Load<Sprite>("gameclear");
-            if (resSprite != null)
-            {
-                clearSprite = resSprite;
-                backgroundImage.sprite = resSprite;
-                backgroundImage.color = Color.white;
-            }
+            backgroundImage.sprite = clearSprite;
+            backgroundImage.color = Color.white;
         }
     }
 
@@ -236,105 +214,23 @@ public class GameClearUIController : MonoBehaviour
     {
         EnsureBackgroundSprite();
 
-        var scoreValueContainer = FindChildRecursive(transform, "점수위치");
-        if (scoreValueContainer != null)
-        {
-            for (int i = 0; i < scoreValueContainer.childCount; i++)
-            {
-                var child = scoreValueContainer.GetChild(i);
-                var tmp = child.GetComponent<TextMeshProUGUI>();
-                if (tmp == null) continue;
-
-                if (child.name.Contains("시간") || child.name.Contains("Time") || child.name.Contains("생존") || child.name.Contains("클리어"))
-                {
-                    clearTimeText = tmp;
-                }
-                else if (child.name.Contains("흡혈") || child.name.Contains("Blood") || child.name.Contains("피"))
-                {
-                    suckedBloodText = tmp;
-                }
-                else if (child.name.Contains("점수") || child.name.Contains("Score"))
-                {
-                    scoreText = tmp;
-                }
-            }
-        }
-
-        if (clearTimeText == null)
-        {
-            var t = FindChildRecursive(transform, "Time", "클리어시간", "생존시간", "시간");
-            if (t != null) clearTimeText = t.GetComponent<TextMeshProUGUI>();
-        }
-
-        if (suckedBloodText == null)
-        {
-            var t = FindChildRecursive(transform, "Blood", "흡혈량", "피");
-            if (t != null) suckedBloodText = t.GetComponent<TextMeshProUGUI>();
-        }
-
-        if (scoreText == null)
-        {
-            var t = FindChildRecursive(transform, "Score", "점수");
-            if (t != null) scoreText = t.GetComponent<TextMeshProUGUI>();
-        }
-
-        if (titleText == null)
-        {
-            var t = FindChildRecursive(transform, "Title", "GameClearText", "제목");
-            if (t != null) titleText = t.GetComponent<TextMeshProUGUI>();
-        }
-
-        // 버튼 클릭 이벤트 중복 바인딩 방지 처리
-        if (restartButton == null)
-        {
-            var t = FindChildRecursive(transform, "restart", "재시작", "retry");
-            if (t != null) restartButton = t.GetComponent<Button>() ?? t.gameObject.AddComponent<Button>();
-        }
         if (restartButton != null)
         {
             restartButton.onClick.RemoveAllListeners();
             restartButton.onClick.AddListener(OnRestartClicked);
         }
 
-        if (lobbyButton == null)
-        {
-            var t = FindChildRecursive(transform, "lobby", "로비", "title", "main");
-            if (t != null) lobbyButton = t.GetComponent<Button>() ?? t.gameObject.AddComponent<Button>();
-        }
         if (lobbyButton != null)
         {
             lobbyButton.onClick.RemoveAllListeners();
             lobbyButton.onClick.AddListener(OnLobbyClicked);
         }
 
-        if (gameEndButton == null)
-        {
-            var t = FindChildRecursive(transform, "gameend", "종료", "exit", "quit", "end");
-            if (t != null) gameEndButton = t.GetComponent<Button>() ?? t.gameObject.AddComponent<Button>();
-        }
         if (gameEndButton != null)
         {
             gameEndButton.onClick.RemoveAllListeners();
             gameEndButton.onClick.AddListener(OnGameEndClicked);
         }
-    }
-
-    private Transform FindChildRecursive(Transform parent, params string[] candidateNames)
-    {
-        foreach (Transform child in parent)
-        {
-            foreach (var name in candidateNames)
-            {
-                if (child.name.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    return child;
-                }
-            }
-
-            var sub = FindChildRecursive(child, candidateNames);
-            if (sub != null) return sub;
-        }
-        return null;
     }
 
     public void OnRestartClicked()

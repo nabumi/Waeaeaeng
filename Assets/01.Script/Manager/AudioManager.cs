@@ -275,13 +275,40 @@ public class AudioManager : MonoBehaviour
     public void SetMasterVolume(float volume)
     {
         masterVolume = Mathf.Clamp01(volume);
+        UpdateSourceVolumes();
+        AudioListener.volume = masterVolume;
+    }
+
+    public void SetBGMVolume(float volume)
+    {
+        bgmVolume = Mathf.Clamp01(volume);
+        UpdateSourceVolumes();
+    }
+
+    public void SetSFXVolume(float volume)
+    {
+        sfxVolume = Mathf.Clamp01(volume);
+        UpdateSourceVolumes();
+    }
+
+    private void UpdateSourceVolumes()
+    {
         if (bgmSource != null) bgmSource.volume = bgmVolume * masterVolume;
         if (sfxSource != null) sfxSource.volume = sfxVolume * masterVolume;
-        AudioListener.volume = masterVolume;
+        if (mosquitoBuzzSource != null) mosquitoBuzzSource.volume = 0.08f * sfxVolume * masterVolume;
     }
 
     public void ToggleMute(bool isMuted)
     {
         AudioListener.volume = isMuted ? 0f : masterVolume;
+        AudioListener.pause = isMuted;
+        if (bgmSource != null) bgmSource.mute = isMuted;
+        if (sfxSource != null) sfxSource.mute = isMuted;
+        if (mosquitoBuzzSource != null) mosquitoBuzzSource.mute = isMuted;
     }
+
+    public float GetMasterVolume() => masterVolume;
+    public float GetBGMVolume() => bgmVolume;
+    public float GetSFXVolume() => sfxVolume;
+    public bool IsMuted => AudioListener.volume <= 0.001f;
 }

@@ -147,6 +147,9 @@ public class HandAttackUIController : MonoBehaviour
             }
         }
 
+        // 손바닥 강타 사운드 재생 (1.8배 시원한 볼륨으로 출력)
+        AudioManager.Instance?.PlaySFX(AudioManager.SFXType.Slap, volumeMultiplier: 1.8f);
+
         // 손바닥 타격 피크 프레임에서 히트 판정 콜백 호출
         onHitImpact?.Invoke();
 

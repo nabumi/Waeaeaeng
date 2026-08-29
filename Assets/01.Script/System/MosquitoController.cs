@@ -602,7 +602,6 @@ public class MosquitoController : MonoBehaviour
     {
         if (isDead) return;
 
-        AudioManager.Instance?.PlaySFX(AudioManager.SFXType.Slap);
         ExecuteDeathSequence();
     }
 
