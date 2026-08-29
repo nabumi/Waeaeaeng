@@ -146,6 +146,9 @@ public class MosquitoController : MonoBehaviour
 
         BloodManager.OnBloodDepleted += DieFromStarvation;
         EscapeSystem.OnGameClear += OnGameClear;
+
+        // [추가] 옵션창 토글 이벤트 구독
+        OptionMenuUI.OnPauseStateChanged += HandlePauseStateChanged;
     }
 
     private void OnDisable()
@@ -162,7 +165,39 @@ public class MosquitoController : MonoBehaviour
 
         BloodManager.OnBloodDepleted -= DieFromStarvation;
         EscapeSystem.OnGameClear -= OnGameClear;
+
+        // [추가] 옵션창 토글 이벤트 해제
+        OptionMenuUI.OnPauseStateChanged -= HandlePauseStateChanged;
+
         ResetTimeScale();
+    }
+
+    /// <summary>
+    /// [추가] 일시정지 상태에 따른 모기 조작 및 사운드 방어 로직
+    /// </summary>
+    private void HandlePauseStateChanged(bool isPaused)
+    {
+        if (isDead) return;
+
+        if (isPaused)
+        {
+            // 1. 모기 소리 일시 정지
+            AudioManager.Instance?.StopMosquitoBuzz();
+
+            // 2. 인게임 조작 입력 차단
+            if (playerInput != null) playerInput.enabled = false;
+        }
+        else
+        {
+            // 1. 조작 입력 다시 복구
+            if (playerInput != null) playerInput.enabled = true;
+
+            // 2. 비행 상태였다면 모기 버즈 사운드 재개
+            if (currentState == MosquitoState.Flying)
+            {
+                AudioManager.Instance?.StartMosquitoBuzz();
+            }
+        }
     }
 
     private void OnGameClear()
