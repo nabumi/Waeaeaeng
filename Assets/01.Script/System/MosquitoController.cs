@@ -435,7 +435,7 @@ public class MosquitoController : MonoBehaviour
 
     private void FinishBiteSession()
     {
-        if (currentBitingZone != null && currentZoneSuckedBlood > 0f)
+        if (currentBitingZone != null)
         {
             currentBitingZone.RegisterBiteMark(transform.position);
             currentBitingZone = null;
@@ -655,6 +655,21 @@ public class MosquitoController : MonoBehaviour
         Vector3 landingPoint = hit.ClosestPoint(transform.position);
 
         BitingZone bZone = hit.GetComponent<BitingZone>() ?? hit.GetComponentInParent<BitingZone>();
+        if (bZone == null)
+        {
+            bZone = hit.gameObject.AddComponent<BitingZone>();
+            IBodyPartZone bpZone = hit.GetComponent<IBodyPartZone>() ?? hit.GetComponentInParent<IBodyPartZone>();
+            if (bpZone != null)
+            {
+                if (hit.name.Contains("Head") || hit.transform.parent != null && hit.transform.parent.name.Contains("Head"))
+                    bZone.CurrentZoneType = GlobalEnums.ZoneType.Red;
+                else if (hit.name.Contains("Upper") || hit.transform.parent != null && hit.transform.parent.name.Contains("Upper"))
+                    bZone.CurrentZoneType = GlobalEnums.ZoneType.Yellow;
+                else
+                    bZone.CurrentZoneType = GlobalEnums.ZoneType.Green;
+            }
+        }
+
         if (bZone != null)
         {
             if (bZone.IsPositionAlreadyBitten(landingPoint))
