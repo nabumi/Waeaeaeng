@@ -21,15 +21,17 @@ public class MosquitoController : MonoBehaviour
     // =========================================================================
     // [이벤트 시스템]
     // =========================================================================
-    /// <summary>
-    /// C# Action을 활용한 사망 이벤트 (외부 시스템 전파용)
-    /// </summary>
     public static event Action OnMosquitoDied;
     public event Action<float, float> OnBloodAmountChanged; // (현재 피, 최대 피)
 
     [Header("현재 상태")]
     [SerializeField] private MosquitoState currentState = MosquitoState.Flying;
     [SerializeField] private bool isDead = false;
+
+    [Header("시각 연출 및 꼬리 동기화")]
+    [Tooltip("자식 Visual 오브젝트에 붙은 꼬리 동기화 컴포넌트")]
+    [SerializeField] private MosquitoTailSync tailSync;
+    [SerializeField] private bool isFacingRight = true; // 모기가 기본적으로 오른쪽을 바라보고 있는지 여부
 
     [Header("비행 및 이동 설정")]
     [SerializeField] private float baseMoveSpeed = 5;
@@ -108,6 +110,12 @@ public class MosquitoController : MonoBehaviour
         spriteRenderer = GetComponentInChildren<SpriteRenderer>() ?? GetComponent<SpriteRenderer>();
         rb.gravityScale = 0f;
 
+        // [추가] 자식 오브젝트에서 MosquitoTailSync 자동 탐색
+        if (tailSync == null)
+        {
+            tailSync = GetComponentInChildren<MosquitoTailSync>();
+        }
+
         if (spriteRenderer != null) spriteRenderer.sortingOrder = 10;
         if (deathSprite == null) deathSprite = Resources.Load<Sprite>("Sprites/Mosquito_death");
 
@@ -185,6 +193,9 @@ public class MosquitoController : MonoBehaviour
         UpdateAnimationState();
         OnBloodAmountChanged?.Invoke(currentBlood, maxBlood);
 
+        // [추가] 시작 프레임 시각 상태 강제 동기화
+        UpdateDirection(isFacingRight, true);
+
         AudioManager.Instance?.StartMosquitoBuzz();
     }
 
@@ -236,6 +247,7 @@ public class MosquitoController : MonoBehaviour
             CalculateEffectiveSpeed();
         }
 
+        // [개선] 스프라이트 및 꼬리 위치 좌우 반전 체크
         UpdateSpriteFacing();
 
         if (currentState == MosquitoState.Flying)
@@ -292,12 +304,43 @@ public class MosquitoController : MonoBehaviour
         CalculateEffectiveSpeed();
     }
 
+    /// <summary>
+    /// 이동 입력값에 따라 모기 몸통 및 꼬리의 좌우 방향 반전을 제어
+    /// </summary>
     private void UpdateSpriteFacing()
     {
-        if (moveInput.x > 0.05f && spriteRenderer != null && spriteRenderer.flipX)
-            spriteRenderer.flipX = false;
-        else if (moveInput.x < -0.05f && spriteRenderer != null && !spriteRenderer.flipX)
-            spriteRenderer.flipX = true;
+        if (moveInput.x > 0.05f)
+        {
+            UpdateDirection(true);
+        }
+        else if (moveInput.x < -0.05f)
+        {
+            UpdateDirection(false);
+        }
+    }
+
+    /// <summary>
+    /// 모기의 방향 상태를 갱신하고 몸통(SpriteRenderer)과 꼬리(MosquitoTailSync)를 함께 동기화
+    /// </summary>
+    /// <param name="faceRight">오른쪽 바라봄 여부</param>
+    /// <param name="forceUpdate">강제 갱신 여부 (Start 등에서 호출 시 사용)</param>
+    public void UpdateDirection(bool faceRight, bool forceUpdate = false)
+    {
+        if (!forceUpdate && isFacingRight == faceRight) return;
+
+        isFacingRight = faceRight;
+
+        // 1. 몸통(Player) flipX 반전 (원본이 오른쪽을 보고 있으므로 faceRight가 false일 때 flipX = true)
+        if (spriteRenderer != null)
+        {
+            spriteRenderer.flipX = !isFacingRight;
+        }
+
+        // 2. 자식 꼬리(Visual) 위치 및 flipX 동기화 호출
+        if (tailSync != null)
+        {
+            tailSync.SynchronizeTail(isFacingRight);
+        }
     }
 
     private void HandleKeyboardDashCheck()
@@ -349,7 +392,8 @@ public class MosquitoController : MonoBehaviour
             UpdateAnimationState();
         }
 
-        Vector2 facingDir = (spriteRenderer != null && spriteRenderer.flipX) ? Vector2.left : Vector2.right;
+        // [개선] isFacingRight 상태 기반으로 대시 방향 지정
+        Vector2 facingDir = isFacingRight ? Vector2.right : Vector2.left;
         currentDashDirection = moveInput != Vector2.zero ? moveInput.normalized : facingDir;
 
         StartCoroutine(DashRoutine());
@@ -571,21 +615,15 @@ public class MosquitoController : MonoBehaviour
         ExecuteDeathSequence();
     }
 
-    /// <summary>
-    /// 모기 개체의 사망 처리 진입점 (단일 책임: 모기 개체 상태 변경)
-    /// </summary>
     private void ExecuteDeathSequence()
     {
-        // [1] 중복 사망 방지 Guard Clause
         if (isDead) return;
 
         isDead = true;
         currentState = MosquitoState.Dead;
 
-        // [2] 불릿 타임 중 사망 시 TimeScale 원복 필수 (Time.timeScale = 1.0f)
         ResetTimeScale();
 
-        // [3] 물리 및 이동 중단 ($v = 0$)
         if (rb != null)
         {
             rb.linearVelocity = Vector2.zero;
@@ -593,25 +631,18 @@ public class MosquitoController : MonoBehaviour
             rb.simulated = false;
         }
 
-        // [4] 사용자 입력 차단
         if (playerInput != null)
             playerInput.enabled = false;
 
-        // [5] 사운드 처리 (개체 단위 SFX)
         AudioManager.Instance?.StopMosquitoBuzz();
         AudioManager.Instance?.PlaySFX(AudioManager.SFXType.GameOver);
 
-        // [6] 모기 시각 연출 실행
         StopAllCoroutines();
         StartCoroutine(DeathMotionRoutine());
 
-        // [7] 글로벌 관찰자들에게 사망 알림 전파 (Decoupling)
         OnMosquitoDied?.Invoke();
     }
 
-    /// <summary>
-    /// 모기가 피격되어 찌그러지는 연출 코루틴
-    /// </summary>
     private IEnumerator DeathMotionRoutine()
     {
         if (animator != null) animator.enabled = false;
@@ -622,7 +653,6 @@ public class MosquitoController : MonoBehaviour
         float timer = 0f;
         float flattenDuration = 0.15f;
 
-        // X축 확대, Y축 축소를 통한 $Scale_{target} = (1.4 \cdot X, 0.4 \cdot Y)$ 변형 연출
         while (timer < flattenDuration)
         {
             timer += Time.deltaTime;
