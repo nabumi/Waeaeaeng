@@ -71,6 +71,7 @@ public class MosquitoController : MonoBehaviour
     private BitingZone currentBitingZone;
     private float currentZoneMaxSuckAmount = 0f;
     private float currentZoneSuckedBlood = 0f;
+    private bool hasRegisteredBiteMark = false;
 
     [Header("이동속도 디버프 설정")]
     [SerializeField] private float speedDebuffPerLevel = 0.1f;
@@ -405,6 +406,7 @@ public class MosquitoController : MonoBehaviour
     {
         currentState = MosquitoState.Sucking;
         currentZoneSuckedBlood = 0f;
+        hasRegisteredBiteMark = false;
         SwitchActionMapSafely("Feeding");
         UpdateAnimationState();
     }
@@ -437,6 +439,13 @@ public class MosquitoController : MonoBehaviour
             }
 
             currentZoneSuckedBlood += actual;
+
+            // 피를 한 번이라도 빨면 즉시 해당 위치에 물린 자국(흉터) 생성 및 등록
+            if (actual > 0f && !hasRegisteredBiteMark && currentBitingZone != null)
+            {
+                currentBitingZone.RegisterBiteMark(transform.position);
+                hasRegisteredBiteMark = true;
+            }
 
             OnBloodAmountChanged?.Invoke(currentBlood, maxBlood);
             CalculateEffectiveSpeed();
@@ -472,9 +481,14 @@ public class MosquitoController : MonoBehaviour
     {
         if (currentBitingZone != null)
         {
-            currentBitingZone.RegisterBiteMark(transform.position);
+            // 혹시 아직 생성되지 않았지만 피를 빤 적이 있는 경우에만 생성
+            if (!hasRegisteredBiteMark && currentZoneSuckedBlood > 0f)
+            {
+                currentBitingZone.RegisterBiteMark(transform.position);
+            }
             currentBitingZone = null;
         }
+        hasRegisteredBiteMark = false;
     }
 
     private void CalculateEffectiveSpeed()
@@ -730,6 +744,8 @@ public class MosquitoController : MonoBehaviour
     private void StartLandingSequence(Collider2D skin, float dangerRatio)
     {
         currentState = MosquitoState.Landing;
+        currentZoneSuckedBlood = 0f;
+        hasRegisteredBiteMark = false;
         transform.position = skin.ClosestPoint(transform.position);
 
         ResetTimeScale();

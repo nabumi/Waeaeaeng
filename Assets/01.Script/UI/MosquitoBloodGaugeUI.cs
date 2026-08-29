@@ -115,7 +115,7 @@ public class MosquitoBloodGaugeUI : MonoBehaviour
         if (bloodText != null)
         {
             bloodText.text = $"{Mathf.CeilToInt(current)} ml";
-            bloodText.color = ratio < 0.25f ? criticalColor : Color.white;
+            bloodText.color = Color.white;
         }
     }
 
