@@ -2,8 +2,7 @@ using System.Collections;
 using UnityEngine;
 
 /// <summary>
-/// 인간의 분노 스택에 따라 공격 전조 시간을 5초부터 점진적으로 단축시키고,
-/// 손바닥 공격의 랜덤 회전 각도를 부여하는 관리 매니저 클래스.
+/// 인간의 분노 스택 관리 및 손바닥 공격 시퀀스를 제어하는 싱글톤 매니저 클래스.
 /// </summary>
 public class HumanAngerManager : MonoBehaviour
 {
@@ -14,17 +13,17 @@ public class HumanAngerManager : MonoBehaviour
     [SerializeField] private GameObject handAttackUIPrefab;
 
     [Header("손바닥 회전 연출 설정")]
-    [Tooltip("손바닥 UI가 회전할 최소 Z 각도 (예: -60도)")]
+    [Tooltip("손바닥 UI가 회전할 최소 Z 각도")]
     [SerializeField] private float minRotationAngle = -60f;
 
-    [Tooltip("손바닥 UI가 회전할 최대 Z 각도 (예: 60도)")]
+    [Tooltip("손바닥 UI가 회전할 최대 Z 각도")]
     [SerializeField] private float maxRotationAngle = 60f;
 
     [Header("공격 속도 밸런싱 (Time Settings)")]
     [Tooltip("기본 분노 0일 때 공격 차오름 시간 (기본 5초)")]
     [SerializeField] private float baseFillDuration = 5.0f;
 
-    [Tooltip("분노가 극에 달했을 때의 최소 공격 전조 시간 (유저 최후의 반응 속도)")]
+    [Tooltip("최소 공격 전조 시간")]
     [SerializeField] private float minFillDuration = 0.5f;
 
     [Tooltip("손바닥 피격 판정 범위 반지름")]
@@ -33,14 +32,15 @@ public class HumanAngerManager : MonoBehaviour
     [SerializeField] private LayerMask mosquitoLayer;
 
     [Header("인간 분노(Anger) 가속 설정")]
-    [Tooltip("1회 회피할 때마다 추가되는 분노 계수 (0.25 = 회피할 때마다 25%씩 가속)")]
+    [Tooltip("1회 회피할 때마다 추가되는 분노 계수")]
     [SerializeField] private float angerPerDodge = 0.25f;
 
     private int dodgeCount = 0;
     private float currentAngerMultiplier = 1.0f;
 
+    // [핵심 해결] MosquitoController가 외부에서 읽을 수 있도록 public 프로퍼티 명시!
     /// <summary>
-    /// 현재 인간의 분노 배율 (기본 1.0 ~ 회피 시 증가)
+    /// 현재 인간의 분노 배율 ($A_{\text{mult}} \ge 1.0$)
     /// </summary>
     public float CurrentAngerMultiplier => currentAngerMultiplier;
 
@@ -81,9 +81,6 @@ public class HumanAngerManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// 공격을 트리거합니다. 분노 수치에 따라 5초에서 점점 줄어드는 시간을 계산합니다.
-    /// </summary>
     public void TriggerAttack(Vector2 targetWorldPosition)
     {
         if (isAttacking) return;
@@ -97,17 +94,12 @@ public class HumanAngerManager : MonoBehaviour
         StartCoroutine(HandAttackRoutine(targetWorldPosition));
     }
 
-    /// <summary>
-    /// 손바닥 공격 진행 코루틴 (고정 좌표 및 랜덤 회전 생성 후 연출 대기 및 데미지 처리)
-    /// </summary>
     private IEnumerator HandAttackRoutine(Vector2 targetWorldPosition)
     {
         isAttacking = true;
 
-        // T_fill = Max(T_min, T_base / AngerMultiplier)
+        // 경고 시간 계산: $T_{\text{fill}} = \max\left(T_{\min}, \frac{T_{\text{base}}}{A_{\text{mult}}}\right)$
         float currentFillDuration = Mathf.Max(minFillDuration, baseFillDuration / currentAngerMultiplier);
-
-        Debug.Log($"<color=cyan>[공격 시작] 현재 분노 배율: {currentAngerMultiplier:F2}x | 경고 시간: {currentFillDuration:F2}초</color>");
 
         if (targetCanvas == null)
         {
@@ -116,44 +108,40 @@ public class HumanAngerManager : MonoBehaviour
             yield break;
         }
 
-        // 1. UI Prefab 생성
         GameObject handInstance = Instantiate(handAttackUIPrefab, targetCanvas.transform);
-
-        // 2. [핵심] Z축 랜덤 회전 각도 연산 ($\theta_{\text{rand}} \in [\theta_{\min}, \theta_{\max}]$)
         float randomAngle = Random.Range(minRotationAngle, maxRotationAngle);
 
-        // 3. UI 제어기를 통한 위치 고정, 회전 및 연출 시작
         if (handInstance.TryGetComponent<HandAttackUIController>(out var uiController))
         {
-            // [핵심] 고정 월드 좌표, Canvas, 그리고 랜덤 Z 회전각 전달!
             uiController.Initialize(targetWorldPosition, targetCanvas, randomAngle);
 
-            bool isAnimationFinished = false;
-            uiController.StartHandCharge(currentFillDuration, () =>
-            {
-                isAnimationFinished = true;
-            });
+            bool isSequenceFinished = false;
 
-            // 연출이 완료될 때까지 대기
-            yield return new WaitUntil(() => isAnimationFinished);
+            // 시퀀스 호출: 손바닥 강타 순간 데미지 판정, 전체 완료 후 삭제
+            uiController.StartHandAttackSequence(
+                currentFillDuration,
+                onHitImpact: () =>
+                {
+                    ExecuteAttackDamage(targetWorldPosition);
+                },
+                onSequenceComplete: () =>
+                {
+                    isSequenceFinished = true;
+                }
+            );
+
+            yield return new WaitUntil(() => isSequenceFinished);
         }
         else
         {
-            // Fallback: HandAttackUIController가 없을 경우 단순 대기
             yield return new WaitForSeconds(currentFillDuration);
+            ExecuteAttackDamage(targetWorldPosition);
         }
 
-        // 4. 고정된 좌표 지점에 판정 실행
-        ExecuteAttackDamage(targetWorldPosition);
-
-        // 5. UI 제거 및 공격 상태 해제
         Destroy(handInstance);
         isAttacking = false;
     }
 
-    /// <summary>
-    /// 지정된 월드 좌표 범위 내에 모기가 있는지 판정하여 데미지를 입깁니다.
-    /// </summary>
     private void ExecuteAttackDamage(Vector2 targetWorldPosition)
     {
         Collider2D hitMosquito = Physics2D.OverlapCircle(targetWorldPosition, attackRadius, mosquitoLayer);
@@ -174,16 +162,13 @@ public class HumanAngerManager : MonoBehaviour
     {
         dodgeCount++;
         currentAngerMultiplier = 1.0f + (dodgeCount * angerPerDodge);
-
-        float nextDuration = Mathf.Max(minFillDuration, baseFillDuration / currentAngerMultiplier);
-        Debug.Log($"<color=yellow>[회피 성공!] 모기가 피했습니다! 분노 스택: {dodgeCount} | 다음 공격 시간: {nextDuration:F2}초</color>");
+        Debug.Log($"<color=yellow>[회피 성공!] 분노 스택: {dodgeCount} | 배율: {currentAngerMultiplier:F2}x</color>");
     }
 
     public void ResetAnger()
     {
         dodgeCount = 0;
         currentAngerMultiplier = 1.0f;
-        Debug.Log("<color=green>[분노 초기화] 사람이 상쾌해졌습니다. 공격 시간이 5초로 리셋됩니다.</color>");
     }
 
     private void OnDrawGizmosSelected()

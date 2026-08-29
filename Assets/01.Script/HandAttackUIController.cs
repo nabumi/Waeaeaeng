@@ -4,38 +4,47 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 손바닥 마스크 내부에서 장심(중앙)부터 피가 차오르는 연출과
-/// 랜덤 회전(Z축) 및 월드 좌표 UI 고정을 처리하는 완결판 UI 제어 클래스.
+/// 손바닥 모양 그림자 커짐 연출, 손바닥 강타(Slam), HIT 이펙트 연출을
+/// 순차적으로 시퀀싱하여 처리하는 타격 UI 제어 클래스.
 /// </summary>
 public class HandAttackUIController : MonoBehaviour
 {
-    [Header("UI 레이어 바인딩")]
-    [Tooltip("Mask_Container 하위에서 중앙 스케일이 커질 Red_Inner_Fill의 RectTransform")]
-    [SerializeField] private RectTransform redInnerFillTransform;
+    [Header("UI 바인딩 리소스")]
+    [Tooltip("손바닥 모양 검은색/어두운 실루엣 그림자 RectTransform")]
+    [SerializeField] private RectTransform shadowRectTransform;
 
-    [Tooltip("최상단 선화 외곽선 이미지 (Hand_Outline_FG)")]
-    [SerializeField] private Image outlineForegroundImage;
+    [Tooltip("손바닥 그림자 Image (알파값 조절용)")]
+    [SerializeField] private Image shadowImage;
 
-    [Header("연출 가속 및 피드백 설정")]
-    [Tooltip("차오름 속도 가속 커브 (Ease-In 형태 권장)")]
-    [SerializeField] private AnimationCurve fillEasing = AnimationCurve.EaseInOut(0, 0, 1, 1);
+    [Tooltip("실제 내려치는 손바닥 그래픽 GameObject")]
+    [SerializeField] private GameObject handGraphicObject;
 
-    [Tooltip("점멸 시작 지점 (0.85 = 85% 진행 시점부터 깜빡임)")]
-    [Range(0.5f, 0.95f)]
-    [SerializeField] private float flashStartThreshold = 0.85f;
+    [Tooltip("손바닥 타격 시 출력될 HIT 이펙트 UI GameObject")]
+    [SerializeField] private GameObject hitEffectObject;
 
-    [Tooltip("외곽선 점멸 주파수(속도)")]
-    [SerializeField] private float flashFrequency = 45f;
+    [Header("연출 세부 설정")]
+    [Tooltip("그림자 시작 스케일 (0.2 = 20% 크기부터 시작)")]
+    [SerializeField] private float minShadowScale = 0.2f;
 
-    // 위치 및 회전 고정용 내부 변수
+    // [수정] AnimationCurve.EaseIn -> AnimationCurve.EaseInOut 올바른 API 사용
+    [Tooltip("차오름 속도 가속 커브 (Ease-In-Out 계열)")]
+    [SerializeField] private AnimationCurve fillEasing = AnimationCurve.EaseInOut(0f, 0f, 1f, 1f);
+
+    [Tooltip("손바닥이 내리치는 Slam 연출 시간 (초)")]
+    [SerializeField] private float handSlamDuration = 0.08f;
+
+    [Tooltip("HIT 이펙트 유지 시간 (초)")]
+    [SerializeField] private float hitEffectDuration = 0.35f;
+
+    // 위치 고정 및 상태 변수
     private Vector2 targetWorldPosition;
     private Canvas parentCanvas;
     private Camera mainCamera;
     private bool isInitialized = false;
-    private Coroutine chargeCoroutine;
+    private Coroutine attackSequenceCoroutine;
 
     /// <summary>
-    /// UI 생성 직후 HumanAngerManager에 의해 호출되어 고정 월드 좌표, 캔버스, 랜덤 회전각을 설정합니다.
+    /// UI 생성 직후 위치 및 회전을 설정합니다.
     /// </summary>
     public void Initialize(Vector2 worldPos, Canvas canvas, float zRotationAngle = 0f)
     {
@@ -43,14 +52,17 @@ public class HandAttackUIController : MonoBehaviour
         this.parentCanvas = canvas;
         this.mainCamera = Camera.main != null ? Camera.main : FindAnyObjectByType<Camera>();
 
-        // [핵심] Z축 랜덤 회전 적용 (Quaternion 변환)
+        // Z축 랜덤 회전 적용
         RectTransform rectTransform = GetComponent<RectTransform>();
         if (rectTransform != null)
         {
             rectTransform.localRotation = Quaternion.Euler(0f, 0f, zRotationAngle);
         }
 
-        // 생성 직후 좌표 맞춤
+        // 초기 오브젝트 상태 정리
+        if (handGraphicObject != null) handGraphicObject.SetActive(false);
+        if (hitEffectObject != null) hitEffectObject.SetActive(false);
+
         UpdateUIPosition();
         isInitialized = true;
     }
@@ -58,73 +70,105 @@ public class HandAttackUIController : MonoBehaviour
     private void Update()
     {
         if (!isInitialized) return;
-
-        // 모기가 이동하더라도 카메라 이동에 대응하여 월드 고정 좌표(targetWorldPosition)를 유지
         UpdateUIPosition();
     }
 
     /// <summary>
-    /// 차오름 경고 연출을 시작하는 메인 함수
+    /// 그림자 확대 -> 손바닥 강타 및 데미지 판정 -> HIT 이펙트 연출 시퀀스를 실행합니다.
     /// </summary>
-    public void StartHandCharge(float duration, Action onComplete)
+    public void StartHandAttackSequence(float chargeDuration, Action onHitImpact, Action onSequenceComplete)
     {
-        if (chargeCoroutine != null)
-            StopCoroutine(chargeCoroutine);
+        if (attackSequenceCoroutine != null)
+            StopCoroutine(attackSequenceCoroutine);
 
-        chargeCoroutine = StartCoroutine(HandChargeRoutine(duration, onComplete));
+        attackSequenceCoroutine = StartCoroutine(HandAttackSequenceRoutine(chargeDuration, onHitImpact, onSequenceComplete));
     }
 
-    private IEnumerator HandChargeRoutine(float duration, Action onComplete)
+    private IEnumerator HandAttackSequenceRoutine(float chargeDuration, Action onHitImpact, Action onSequenceComplete)
     {
         float timer = 0f;
 
-        // 1. 초기화: 스케일을 0으로 설정하여 중앙점으로 축소
-        if (redInnerFillTransform != null)
+        // ------------------------------------------------------------------
+        // Phase 1: 그림자 차오름 연출 (Shadow Scaling Phase)
+        // ------------------------------------------------------------------
+        if (shadowRectTransform != null)
         {
-            redInnerFillTransform.localScale = Vector3.zero;
+            shadowRectTransform.localScale = Vector3.one * minShadowScale;
         }
 
-        // 2. 프레임 단위 차오름 및 연출 루프
-        while (timer < duration)
+        while (timer < chargeDuration)
         {
             timer += Time.deltaTime;
 
-            // 선형 진행율 연산: $p = \min(1, \frac{t}{T})$
-            float linearProgress = Mathf.Clamp01(timer / duration);
-
-            // 커브/수학 이징 적용: $S(p) = \text{Easing}(p)$
+            // 선형 진행율: $p = \min\left(1, \frac{t}{T}\right)$
+            float linearProgress = Mathf.Clamp01(timer / chargeDuration);
             float easedProgress = fillEasing.Evaluate(linearProgress);
 
-            // [핵심 연출 1] Pivot(0.5, 0.5) 기준으로 중앙에서 팽창!
-            if (redInnerFillTransform != null)
+            // 스케일 보간 공식: $S(t) = S_{\min} + (1 - S_{\min}) \cdot f(t)$
+            float currentScale = Mathf.Lerp(minShadowScale, 1.0f, easedProgress);
+
+            if (shadowRectTransform != null)
             {
-                redInnerFillTransform.localScale = new Vector3(easedProgress, easedProgress, 1f);
+                shadowRectTransform.localScale = new Vector3(currentScale, currentScale, 1f);
             }
 
-            // [핵심 연출 2] 타격 직전 최상단 외곽선 붉은색 점멸(Flicker) 연출
-            if (linearProgress >= flashStartThreshold && outlineForegroundImage != null)
+            // 그림자 투명도(Alpha) 보간
+            if (shadowImage != null)
             {
-                // $\alpha = \sin(\omega \cdot t) \cdot 0.3 + 0.7$
-                float flashAlpha = Mathf.Sin(Time.time * flashFrequency) * 0.3f + 0.7f;
-                outlineForegroundImage.color = new Color(1f, 0f, 0f, flashAlpha);
+                Color color = shadowImage.color;
+                color.a = Mathf.Lerp(0.3f, 0.85f, easedProgress);
+                shadowImage.color = color;
             }
 
             yield return null;
         }
 
-        // 3. 스케일 $1.0$ 보장
-        if (redInnerFillTransform != null)
+        // ------------------------------------------------------------------
+        // Phase 2: 손바닥 강타 연출 및 HIT 판정 (Slam & Hit Impact Phase)
+        // ------------------------------------------------------------------
+        if (handGraphicObject != null)
         {
-            redInnerFillTransform.localScale = Vector3.one;
+            handGraphicObject.SetActive(true);
+            RectTransform handRect = handGraphicObject.GetComponent<RectTransform>();
+
+            float slamTimer = 0f;
+            while (slamTimer < handSlamDuration)
+            {
+                slamTimer += Time.deltaTime;
+                float slamProgress = Mathf.Clamp01(slamTimer / handSlamDuration);
+
+                if (handRect != null)
+                {
+                    // 손바닥이 $1.4 \to 1.0$ 스케일로 압축되며 착지
+                    float slamScale = Mathf.Lerp(1.4f, 1.0f, slamProgress);
+                    handRect.localScale = new Vector3(slamScale, slamScale, 1f);
+                }
+                yield return null;
+            }
         }
 
-        // 4. 차오름 완수 후 타격 실행 콜백 호출
-        onComplete?.Invoke();
+        // 손바닥 타격 피크 프레임에서 히트 판정 콜백 호출
+        onHitImpact?.Invoke();
+
+        // ------------------------------------------------------------------
+        // Phase 3: HIT 이펙트 연출 (Hit Visual Effect Phase)
+        // ------------------------------------------------------------------
+        if (hitEffectObject != null)
+        {
+            hitEffectObject.SetActive(true);
+        }
+
+        if (shadowRectTransform != null)
+        {
+            shadowRectTransform.gameObject.SetActive(false);
+        }
+
+        yield return new WaitForSeconds(hitEffectDuration);
+
+        // 연출 완료 및 파괴 콜백 호출
+        onSequenceComplete?.Invoke();
     }
 
-    /// <summary>
-    /// 월드 고정 좌표를 캔버스 렌더 모드에 맞게 변환 (유도탄 방지 핵심 메소드)
-    /// </summary>
     private void UpdateUIPosition()
     {
         if (parentCanvas == null || mainCamera == null) return;
@@ -146,7 +190,7 @@ public class HandAttackUIController : MonoBehaviour
             );
             rectTransform.anchoredPosition = localPoint;
         }
-        else // World Space Canvas
+        else
         {
             rectTransform.position = targetWorldPosition;
         }
@@ -154,20 +198,10 @@ public class HandAttackUIController : MonoBehaviour
 
     private void OnDisable()
     {
-        if (chargeCoroutine != null)
+        if (attackSequenceCoroutine != null)
         {
-            StopCoroutine(chargeCoroutine);
-            chargeCoroutine = null;
+            StopCoroutine(attackSequenceCoroutine);
+            attackSequenceCoroutine = null;
         }
     }
-
-    #region 시각적 디버깅 (Visual Debugging)
-
-    [ContextMenu("Test Charge Animation (1.5s)")]
-    private void TestChargeInEditor()
-    {
-        StartHandCharge(1.5f, () => Debug.Log("<color=red> 손바닥 차오름 완료! 찰싹!</color>"));
-    }
-
-    #endregion
 }
