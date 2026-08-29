@@ -219,7 +219,7 @@ public class MosquitoController : MonoBehaviour
         }
         else if (currentState == MosquitoState.Sucking)
         {
-            // 스페이스바 누르면 즉시 이륙 탈출
+            // 흡혈 중 스페이스바 누르면 즉시 이륙 탈출
             if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
             {
                 PerformTakeOff();
@@ -231,11 +231,13 @@ public class MosquitoController : MonoBehaviour
         }
         else if (currentState == MosquitoState.Checking)
         {
-            // 스킬체크 도중에도 스페이스바 누르면 탈출
+            // 스킬체크 중 스페이스바 입력은 스킬체크 판정 트리거
             if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
             {
-                PerformTakeOff();
-                return;
+                if (SkillCheckUI.Instance != null)
+                {
+                    SkillCheckUI.Instance.OnInputPressed();
+                }
             }
         }
     }
@@ -729,7 +731,7 @@ public class MosquitoController : MonoBehaviour
     {
         if (isDead) return;
 
-        if (currentState == MosquitoState.Sucking || currentState == MosquitoState.Checking)
+        if (currentState == MosquitoState.Sucking)
         {
             FinishBiteSession();
 
