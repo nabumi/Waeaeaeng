@@ -56,48 +56,54 @@ public class GameManager : MonoBehaviour
     private GameObject gameoverObj;
     private GameObject gameclearObj;
 
-    private void EnsureUIControllers()
+    private GameObject FindSceneObject(string targetName)
     {
-        // 1. gameover 및 gameclear 오브젝트 찾아서 UIController 부착 및 초기 비활성화 보장
-        if (gameoverObj == null || gameclearObj == null)
+        // 1. 활성 씬의 루트 오브젝트 및 자식에서 정밀 탐색 (에셋 폴더 프리팹 제외)
+        var activeScene = SceneManager.GetActiveScene();
+        if (activeScene.isLoaded)
         {
-            var allCanvases = Resources.FindObjectsOfTypeAll<Canvas>();
-            foreach (var canvas in allCanvases)
+            var rootObjects = activeScene.GetRootGameObjects();
+            foreach (var root in rootObjects)
             {
-                if (gameoverObj == null)
-                {
-                    var t = canvas.transform.Find("gameover");
-                    if (t != null) gameoverObj = t.gameObject;
-                }
-                if (gameclearObj == null)
-                {
-                    var t = canvas.transform.Find("gameclear");
-                    if (t != null) gameclearObj = t.gameObject;
-                }
+                if (root.name.Equals(targetName, System.StringComparison.OrdinalIgnoreCase))
+                    return root;
+                var child = FindChildRecursive(root.transform, targetName);
+                if (child != null) return child.gameObject;
             }
         }
 
-        if (gameoverObj == null || gameclearObj == null)
+        // 2. 씬에 로드된 캔버스 자식 탐색
+        var allCanvases = Resources.FindObjectsOfTypeAll<Canvas>();
+        foreach (var canvas in allCanvases)
         {
-            var allTransforms = Resources.FindObjectsOfTypeAll<Transform>();
-            foreach (var t in allTransforms)
-            {
-                if (gameoverObj == null && t.name.Equals("gameover", System.StringComparison.OrdinalIgnoreCase))
-                {
-                    gameoverObj = t.gameObject;
-                }
-                if (gameclearObj == null && t.name.Equals("gameclear", System.StringComparison.OrdinalIgnoreCase))
-                {
-                    gameclearObj = t.gameObject;
-                }
-            }
+            if (canvas == null || !canvas.gameObject.scene.isLoaded) continue;
+            if (canvas.gameObject.name.Equals(targetName, System.StringComparison.OrdinalIgnoreCase))
+                return canvas.gameObject;
+            var child = FindChildRecursive(canvas.transform, targetName);
+            if (child != null) return child.gameObject;
+        }
+
+        return null;
+    }
+
+    private void EnsureUIControllers()
+    {
+        // 1. gameover 및 gameclear 오브젝트 찾아서 UIController 부착 및 초기 비활성화 보장
+        if (gameoverObj == null || !gameoverObj.scene.isLoaded)
+        {
+            gameoverObj = FindSceneObject("gameover");
+        }
+
+        if (gameclearObj == null || !gameclearObj.scene.isLoaded)
+        {
+            gameclearObj = FindSceneObject("gameclear");
         }
 
         if (gameoverObj != null)
         {
-            if (gameoverObj.GetComponent<GameOverUIController>() == null)
+            if (!gameoverObj.TryGetComponent<GameOverUIController>(out var ctrl))
             {
-                gameoverObj.AddComponent<GameOverUIController>();
+                ctrl = gameoverObj.AddComponent<GameOverUIController>();
             }
 
             // 게임 시작 시 무조건 비활성화
@@ -111,9 +117,9 @@ public class GameManager : MonoBehaviour
 
         if (gameclearObj != null)
         {
-            if (gameclearObj.GetComponent<GameClearUIController>() == null)
+            if (!gameclearObj.TryGetComponent<GameClearUIController>(out var ctrl))
             {
-                gameclearObj.AddComponent<GameClearUIController>();
+                ctrl = gameclearObj.AddComponent<GameClearUIController>();
             }
 
             // 게임 시작 시 무조건 비활성화
@@ -166,7 +172,12 @@ public class GameManager : MonoBehaviour
         {
             gameoverObj.SetActive(true);
             var canvas = gameoverObj.GetComponent<Canvas>();
-            if (canvas != null) canvas.enabled = true;
+            if (canvas != null)
+            {
+                canvas.enabled = true;
+                canvas.overrideSorting = true;
+                canvas.sortingOrder = 500;
+            }
             if (!gameoverObj.TryGetComponent<GameOverUIController>(out var ctrl))
             {
                 ctrl = gameoverObj.AddComponent<GameOverUIController>();
@@ -176,25 +187,6 @@ public class GameManager : MonoBehaviour
         else if (GameOverUIController.Instance != null)
         {
             GameOverUIController.Instance.ShowGameOverUI();
-        }
-        else
-        {
-            var allTransforms = Resources.FindObjectsOfTypeAll<Transform>();
-            foreach (var t in allTransforms)
-            {
-                if (t.name.Equals("gameover", System.StringComparison.OrdinalIgnoreCase))
-                {
-                    t.gameObject.SetActive(true);
-                    var canvas = t.GetComponent<Canvas>();
-                    if (canvas != null) canvas.enabled = true;
-                    if (!t.TryGetComponent<GameOverUIController>(out var ctrl))
-                    {
-                        ctrl = t.gameObject.AddComponent<GameOverUIController>();
-                    }
-                    ctrl.ShowGameOverUI();
-                    break;
-                }
-            }
         }
     }
 
@@ -214,7 +206,12 @@ public class GameManager : MonoBehaviour
         {
             gameclearObj.SetActive(true);
             var canvas = gameclearObj.GetComponent<Canvas>();
-            if (canvas != null) canvas.enabled = true;
+            if (canvas != null)
+            {
+                canvas.enabled = true;
+                canvas.overrideSorting = true;
+                canvas.sortingOrder = 500;
+            }
             if (!gameclearObj.TryGetComponent<GameClearUIController>(out var ctrl))
             {
                 ctrl = gameclearObj.AddComponent<GameClearUIController>();
@@ -224,25 +221,6 @@ public class GameManager : MonoBehaviour
         else if (GameClearUIController.Instance != null)
         {
             GameClearUIController.Instance.ShowGameClearUI();
-        }
-        else
-        {
-            var allTransforms = Resources.FindObjectsOfTypeAll<Transform>();
-            foreach (var t in allTransforms)
-            {
-                if (t.name.Equals("gameclear", System.StringComparison.OrdinalIgnoreCase))
-                {
-                    t.gameObject.SetActive(true);
-                    var canvas = t.GetComponent<Canvas>();
-                    if (canvas != null) canvas.enabled = true;
-                    if (!t.TryGetComponent<GameClearUIController>(out var ctrl))
-                    {
-                        ctrl = t.gameObject.AddComponent<GameClearUIController>();
-                    }
-                    ctrl.ShowGameClearUI();
-                    break;
-                }
-            }
         }
     }
 

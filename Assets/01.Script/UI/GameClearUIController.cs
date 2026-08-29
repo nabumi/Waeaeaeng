@@ -44,7 +44,23 @@ public class GameClearUIController : MonoBehaviour
             return;
         }
 
+        // 중복 CanvasScaler가 있으면 부모 Scaler와 충돌하므로 제거
+        var duplicateScaler = GetComponent<CanvasScaler>();
+        if (duplicateScaler != null)
+        {
+            Destroy(duplicateScaler);
+        }
+
+        // 최상단 렌더링 보장 (sortingOrder 500)
         parentCanvas = GetComponent<Canvas>();
+        if (parentCanvas == null) parentCanvas = gameObject.AddComponent<Canvas>();
+        parentCanvas.overrideSorting = true;
+        parentCanvas.sortingOrder = 500;
+
+        if (GetComponent<GraphicRaycaster>() == null)
+        {
+            gameObject.AddComponent<GraphicRaycaster>();
+        }
 
         // RectTransform 앵커를 전체 화면으로 설정
         RectTransform rt = GetComponent<RectTransform>();
@@ -54,6 +70,8 @@ public class GameClearUIController : MonoBehaviour
             rt.anchorMax = Vector2.one;
             rt.offsetMin = Vector2.zero;
             rt.offsetMax = Vector2.zero;
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta = Vector2.zero;
             rt.localScale = Vector3.one;
         }
 
@@ -70,6 +88,12 @@ public class GameClearUIController : MonoBehaviour
                 canvasGroup = gameObject.AddComponent<CanvasGroup>();
             }
         }
+        if (canvasGroup != null)
+        {
+            canvasGroup.alpha = 1.0f;
+            canvasGroup.interactable = true;
+            canvasGroup.blocksRaycasts = true;
+        }
     }
 
     private void Start()
@@ -80,6 +104,7 @@ public class GameClearUIController : MonoBehaviour
 
     private void OnEnable()
     {
+        EscapeSystem.OnGameClear -= ShowGameClearUI;
         EscapeSystem.OnGameClear += ShowGameClearUI;
         EnsureBackgroundSprite();
     }
@@ -292,12 +317,43 @@ public class GameClearUIController : MonoBehaviour
     public void ShowGameClearUI()
     {
         gameObject.SetActive(true);
-        if (parentCanvas != null) parentCanvas.enabled = true;
+
+        if (parentCanvas == null) parentCanvas = GetComponent<Canvas>();
+        if (parentCanvas == null) parentCanvas = gameObject.AddComponent<Canvas>();
+        parentCanvas.enabled = true;
+        parentCanvas.overrideSorting = true;
+        parentCanvas.sortingOrder = 500;
+
+        if (GetComponent<GraphicRaycaster>() == null)
+        {
+            gameObject.AddComponent<GraphicRaycaster>();
+        }
+
         transform.SetAsLastSibling();
+
+        RectTransform rt = GetComponent<RectTransform>();
+        if (rt != null)
+        {
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta = Vector2.zero;
+            rt.localScale = Vector3.one;
+        }
 
         for (int i = 0; i < transform.childCount; i++)
         {
             transform.GetChild(i).gameObject.SetActive(true);
+        }
+
+        EnsureCanvasGroup();
+        if (canvasGroup != null)
+        {
+            canvasGroup.alpha = 1.0f;
+            canvasGroup.interactable = true;
+            canvasGroup.blocksRaycasts = true;
         }
 
         BindComponents();
@@ -346,8 +402,8 @@ public class GameClearUIController : MonoBehaviour
 
         if (canvasGroup != null)
         {
-            canvasGroup.alpha = 0f;
-            canvasGroup.interactable = false;
+            canvasGroup.alpha = 1.0f;
+            canvasGroup.interactable = true;
             canvasGroup.blocksRaycasts = true;
         }
 
@@ -357,7 +413,7 @@ public class GameClearUIController : MonoBehaviour
             timer += Time.unscaledDeltaTime;
             if (canvasGroup != null)
             {
-                canvasGroup.alpha = Mathf.Clamp01(timer / fadeInDuration);
+                canvasGroup.alpha = Mathf.Lerp(0.3f, 1.0f, timer / fadeInDuration);
             }
             yield return null;
         }
@@ -366,6 +422,7 @@ public class GameClearUIController : MonoBehaviour
         {
             canvasGroup.alpha = 1.0f;
             canvasGroup.interactable = true;
+            canvasGroup.blocksRaycasts = true;
         }
         Debug.Log("<color=green>[GameClearUIController] 클리어 화면 페이드인 완료</color>");
     }

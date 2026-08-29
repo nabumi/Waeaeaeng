@@ -42,8 +42,25 @@ public class GameOverUIController : MonoBehaviour
             return;
         }
 
-        parentCanvas = GetComponent<Canvas>();
+        // 중복 CanvasScaler가 있으면 부모 Scaler와 충돌하므로 제거
+        var duplicateScaler = GetComponent<CanvasScaler>();
+        if (duplicateScaler != null)
+        {
+            Destroy(duplicateScaler);
+        }
 
+        // 최상단 렌더링 보장 (sortingOrder 500)
+        parentCanvas = GetComponent<Canvas>();
+        if (parentCanvas == null) parentCanvas = gameObject.AddComponent<Canvas>();
+        parentCanvas.overrideSorting = true;
+        parentCanvas.sortingOrder = 500;
+
+        if (GetComponent<GraphicRaycaster>() == null)
+        {
+            gameObject.AddComponent<GraphicRaycaster>();
+        }
+
+        // 화면 전체 영역으로 RectTransform 강제 확장
         RectTransform rt = GetComponent<RectTransform>();
         if (rt != null)
         {
@@ -51,6 +68,8 @@ public class GameOverUIController : MonoBehaviour
             rt.anchorMax = Vector2.one;
             rt.offsetMin = Vector2.zero;
             rt.offsetMax = Vector2.zero;
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta = Vector2.zero;
             rt.localScale = Vector3.one;
         }
 
@@ -67,6 +86,12 @@ public class GameOverUIController : MonoBehaviour
                 canvasGroup = gameObject.AddComponent<CanvasGroup>();
             }
         }
+        if (canvasGroup != null)
+        {
+            canvasGroup.alpha = 1.0f;
+            canvasGroup.interactable = true;
+            canvasGroup.blocksRaycasts = true;
+        }
     }
 
     private void Start()
@@ -76,6 +101,7 @@ public class GameOverUIController : MonoBehaviour
 
     private void OnEnable()
     {
+        MosquitoController.OnGameOver -= ShowGameOverUI;
         MosquitoController.OnGameOver += ShowGameOverUI;
     }
 
@@ -239,12 +265,43 @@ public class GameOverUIController : MonoBehaviour
     private void OpenResultPanel(bool isClear)
     {
         gameObject.SetActive(true);
-        if (parentCanvas != null) parentCanvas.enabled = true;
+
+        if (parentCanvas == null) parentCanvas = GetComponent<Canvas>();
+        if (parentCanvas == null) parentCanvas = gameObject.AddComponent<Canvas>();
+        parentCanvas.enabled = true;
+        parentCanvas.overrideSorting = true;
+        parentCanvas.sortingOrder = 500;
+
+        if (GetComponent<GraphicRaycaster>() == null)
+        {
+            gameObject.AddComponent<GraphicRaycaster>();
+        }
+
         transform.SetAsLastSibling();
+
+        RectTransform rt = GetComponent<RectTransform>();
+        if (rt != null)
+        {
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta = Vector2.zero;
+            rt.localScale = Vector3.one;
+        }
 
         for (int i = 0; i < transform.childCount; i++)
         {
             transform.GetChild(i).gameObject.SetActive(true);
+        }
+
+        EnsureCanvasGroup();
+        if (canvasGroup != null)
+        {
+            canvasGroup.alpha = 1.0f;
+            canvasGroup.interactable = true;
+            canvasGroup.blocksRaycasts = true;
         }
 
         BindComponents();
@@ -305,8 +362,8 @@ public class GameOverUIController : MonoBehaviour
 
         if (canvasGroup != null)
         {
-            canvasGroup.alpha = 0f;
-            canvasGroup.interactable = false;
+            canvasGroup.alpha = 1.0f;
+            canvasGroup.interactable = true;
             canvasGroup.blocksRaycasts = true;
         }
 
@@ -316,7 +373,7 @@ public class GameOverUIController : MonoBehaviour
             timer += Time.unscaledDeltaTime;
             if (canvasGroup != null)
             {
-                canvasGroup.alpha = Mathf.Clamp01(timer / fadeInDuration);
+                canvasGroup.alpha = Mathf.Lerp(0.3f, 1.0f, timer / fadeInDuration);
             }
             yield return null;
         }
@@ -325,6 +382,7 @@ public class GameOverUIController : MonoBehaviour
         {
             canvasGroup.alpha = 1.0f;
             canvasGroup.interactable = true;
+            canvasGroup.blocksRaycasts = true;
         }
         Debug.Log("<color=green>[GameOverUIController] 결과창 페이드인 완료</color>");
     }
