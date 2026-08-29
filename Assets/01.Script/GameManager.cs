@@ -24,11 +24,32 @@ public class GameManager : MonoBehaviour
             Destroy(gameObject);
             return;
         }
+
+        // 씬 내 gameover UI 오브젝트에 GameOverUIController 자동 바인딩
+        if (GameOverUIController.Instance == null)
+        {
+            var canvas = FindAnyObjectByType<Canvas>();
+            GameObject gameoverObj = null;
+            if (canvas != null)
+            {
+                var t = canvas.transform.Find("gameover");
+                if (t != null) gameoverObj = t.gameObject;
+            }
+            if (gameoverObj == null)
+            {
+                gameoverObj = GameObject.Find("gameover");
+            }
+
+            if (gameoverObj != null && gameoverObj.GetComponent<GameOverUIController>() == null)
+            {
+                gameoverObj.AddComponent<GameOverUIController>();
+            }
+        }
     }
 
     private void Start()
     {
-        AudioManager.Instance.PlayInGameBGM();
+        AudioManager.Instance?.PlayInGameBGM();
     }
 
     private void OnEnable()

@@ -75,6 +75,8 @@ public class MosquitoController : MonoBehaviour
     private Rigidbody2D rb;
     private PlayerInput playerInput;
     private Animator animator;
+    private SpriteRenderer spriteRenderer;
+    [SerializeField] private Sprite deathSprite;
     private Vector2 moveInput;
 
     private InputAction checkAction;
@@ -92,7 +94,13 @@ public class MosquitoController : MonoBehaviour
         rb = GetComponent<Rigidbody2D>();
         playerInput = GetComponent<PlayerInput>();
         animator = GetComponentInChildren<Animator>();
+        spriteRenderer = GetComponentInChildren<SpriteRenderer>() ?? GetComponent<SpriteRenderer>();
         rb.gravityScale = 0f;
+
+        if (deathSprite == null)
+        {
+            deathSprite = Resources.Load<Sprite>("Sprites/Mosquito_death");
+        }
 
         if (playerInput != null && playerInput.actions != null)
         {
@@ -309,17 +317,58 @@ public class MosquitoController : MonoBehaviour
             playerInput.enabled = false;
         }
 
-        UpdateAnimationState();
-
-        Debug.LogError("<color=red>========================================</color>");
-        Debug.LogError("<color=red>[GAME OVER] 모기가 사람 손바닥에 짓눌려 사망했습니다!</color>");
-        Debug.LogError("<color=red>========================================</color>");
-
         if (HumanAngerManager.Instance != null)
         {
             HumanAngerManager.Instance.ResetAnger();
         }
 
+        Debug.LogError("<color=red>========================================</color>");
+        Debug.LogError("<color=red>[사망 연출] 모기가 피격되어 사망 모션을 재생합니다 (1.0초 후 게임오버 UI)</color>");
+        Debug.LogError("<color=red>========================================</color>");
+
+        StartCoroutine(DeathMotionRoutine());
+    }
+
+    private IEnumerator DeathMotionRoutine()
+    {
+        // 1. 애니메이터 비활성화하여 사망 스프라이트가 프레임별로 덮어씌워지지 않도록 방지
+        if (animator != null) animator.enabled = false;
+
+        // 2. 사망 스프라이트 교체
+        if (spriteRenderer != null && deathSprite != null)
+        {
+            spriteRenderer.sprite = deathSprite;
+        }
+
+        // 3. 타격 피격 압축 연출 (0.0s ~ 0.2s)
+        Vector3 baseScale = transform.localScale;
+        float timer = 0f;
+        while (timer < 0.2f)
+        {
+            timer += Time.deltaTime;
+            float t = timer / 0.2f;
+            transform.localScale = new Vector3(baseScale.x * Mathf.Lerp(1.0f, 1.4f, t), baseScale.y * Mathf.Lerp(1.0f, 0.4f, t), baseScale.z);
+            yield return null;
+        }
+
+        // 4. 빙글빙글 회전하며 낙하 연출 (0.2s ~ 1.0s)
+        timer = 0f;
+        float fallDuration = 0.8f;
+        Vector3 startPos = transform.position;
+        while (timer < fallDuration)
+        {
+            timer += Time.deltaTime;
+            float t = timer / fallDuration;
+
+            // 회전 및 아래로 낙하
+            transform.rotation = Quaternion.Euler(0f, 0f, Mathf.Lerp(0f, 720f, t));
+            transform.position = startPos + new Vector3(0f, -Mathf.Sin(t * Mathf.PI * 0.5f) * 0.8f, 0f);
+
+            yield return null;
+        }
+
+        // 5. 정확히 1.0초 사망 모션 완료 후 게임오버 이벤트 발화
+        Debug.LogError("<color=yellow>[GAME OVER] 1.0초 사망 모션 완료 -> 게임오버 결과창 페이드인</color>");
         OnGameOver?.Invoke();
     }
 
