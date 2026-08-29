@@ -367,7 +367,7 @@ public class MosquitoController : MonoBehaviour
 
     #endregion
 
-    #region 흡혈 및 만복/탈출 연동
+    #region 흡혈 및 세션 관리 (업데이트)
 
     private void OnSuckStarted(InputAction.CallbackContext context)
     {
@@ -385,7 +385,7 @@ public class MosquitoController : MonoBehaviour
     private void StartSuckingSequence()
     {
         currentState = MosquitoState.Sucking;
-        currentZoneSuckedBlood = 0f;
+        currentZoneSuckedBlood = 0f; // 안착 후 빨아들인 혈액량 초기화
         SwitchActionMapSafely("Feeding");
         UpdateAnimationState();
     }
@@ -449,13 +449,48 @@ public class MosquitoController : MonoBehaviour
         UpdateAnimationState();
     }
 
+    /// <summary>
+    /// [수정] 정상적인 세션 종료 시 실제 빨아들인 피가 있을 때만 물린 자국을 생성합니다.
+    /// </summary>
     private void FinishBiteSession()
     {
         if (currentBitingZone != null)
         {
-            currentBitingZone.RegisterBiteMark(transform.position);
-            currentBitingZone = null;
+            // 피를 최소 0.01ml 이상 빠는데 성공했을 때만 피부 자국 생성
+            if (currentZoneSuckedBlood > 0f)
+            {
+                currentBitingZone.RegisterBiteMark(transform.position);
+                Debug.Log($"<color=green>[흡혈 성공] {currentZoneSuckedBlood:F1}ml 흡혈 완료! 물린 자국을 남깁니다.</color>");
+            }
+            else
+            {
+                Debug.Log("<color=yellow>[흡혈 미달] 피를 빨지 못하고 이륙하여 물린 자국을 생성하지 않습니다.</color>");
+            }
+
+            ClearBiteSessionData();
         }
+    }
+
+    /// <summary>
+    /// [신규] QTE 실패 또는 기습으로 피를 못 빨고 쫓겨날 때 자국 없이 세션을 즉시 중단합니다.
+    /// </summary>
+    private void AbortBiteSession()
+    {
+        if (currentBitingZone != null)
+        {
+            Debug.Log("<color=orange>[세션 취소] QTE 실패 또는 기습으로 인해 자국 없이 이륙합니다.</color>");
+            ClearBiteSessionData();
+        }
+    }
+
+    /// <summary>
+    /// [신규] 구역 세션 트래킹 변수 세척
+    /// </summary>
+    private void ClearBiteSessionData()
+    {
+        currentBitingZone = null;
+        currentZoneSuckedBlood = 0f;
+        currentZoneMaxSuckAmount = 0f;
     }
 
     private void CalculateEffectiveSpeed()
@@ -694,12 +729,14 @@ public class MosquitoController : MonoBehaviour
             else
                 SkillCheckUI.Instance?.BeginSkillCheck(1.3f, OnDbdSkillCheckCompleted);
         }
-        else
+        else // QTE 실패 처리
         {
             AudioManager.Instance?.PlaySFX(AudioManager.SFXType.QteFail);
             HumanAngerManager.Instance?.TriggerAttack(transform.position);
 
-            FinishBiteSession();
+            // [수정] QTE 실패 시 피를 빨리 못했으므로 자국 없이 세션을 취소(Abort)합니다.
+            AbortBiteSession();
+
             currentState = MosquitoState.Flying;
             SwitchActionMapSafely("Flying");
             UpdateAnimationState();

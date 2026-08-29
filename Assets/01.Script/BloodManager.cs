@@ -7,10 +7,25 @@ using UnityEngine;
 public class BloodManager : MonoBehaviour
 {
     private static BloodManager instance;
+
+    // 애플리케이션 종료 또는 씬 종료 상태를 추적하는 정적 플래그
+    private static bool isApplicationQuitting = false;
+
+    /// <summary>
+    /// 안전하게 인스턴스 존재 여부만 확인 (유령 오브젝트 생성 및 로그 방지)
+    /// </summary>
+    public static bool HasInstance => instance != null && !isApplicationQuitting;
+
     public static BloodManager Instance
     {
         get
         {
+            // 1. 앱/씬 종료 중에는 새 오브젝트를 생성하지 않고 조용히 null을 반환하여 메모리 누수 및 유령 오브젝트 방지
+            if (isApplicationQuitting)
+            {
+                return null;
+            }
+
             if (instance == null)
             {
                 instance = FindAnyObjectByType<BloodManager>();
@@ -40,13 +55,10 @@ public class BloodManager : MonoBehaviour
     private bool isTrackingTime = true;
     private bool isEscapeTriggered = false;
 
-    // 이벤트: (현재 잔여 피, 최대 피)
+    // 이벤트 라인업
     public event Action<float, float> OnBloodAmountChanged;
-    // 이벤트: (이번에 빤 양, 누적 빤 양)
     public event Action<float, float> OnBloodSucked;
-    // 이벤트: 탈출 가능 기준(150ml) 도달 이벤트
     public static event Action OnFullBelly;
-    // 이벤트: 혈액 완전 고갈 (기아 사망 트리거용)
     public static event Action OnBloodDepleted;
 
     public float MaxTargetBlood => maxTargetBlood;
@@ -60,6 +72,9 @@ public class BloodManager : MonoBehaviour
 
     private void Awake()
     {
+        // 씬 전환 후 활성화될 때 종료 플래그 초기화
+        isApplicationQuitting = false;
+
         if (instance == null)
         {
             instance = this;
@@ -83,6 +98,19 @@ public class BloodManager : MonoBehaviour
         }
     }
 
+    private void OnApplicationQuit()
+    {
+        isApplicationQuitting = true;
+    }
+
+    private void OnDestroy()
+    {
+        if (instance == this)
+        {
+            isApplicationQuitting = true;
+        }
+    }
+
     /// <summary>
     /// 혈액 소모 (비행 자연 소모, 대시 소모 등)
     /// </summary>
@@ -101,7 +129,7 @@ public class BloodManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 모기가 피를 빨 때 호출하여 혈액을 충전하고 누적치를 기록
+    /// 모기가 피를 빨 때 호출하여 혈액을 충전하고 누적치 기록
     /// </summary>
     public float RequestSuckBlood(float requestedAmount)
     {
@@ -114,20 +142,16 @@ public class BloodManager : MonoBehaviour
         OnBloodAmountChanged?.Invoke(currentBlood, maxTargetBlood);
         OnBloodSucked?.Invoke(actualSucked, totalSuckedBlood);
 
-        // 150ml 돌파 시 탈출 시스템 트리거 (1회만 발화)
         if (currentBlood >= escapeThresholdBlood && !isEscapeTriggered)
         {
             isEscapeTriggered = true;
-            Debug.LogWarning($"<color=green>[BloodManager] 탈출 기준({escapeThresholdBlood}ml) 달성! 탈출 시스템을 활성화합니다. (최대 {maxTargetBlood}ml까지 추가 흡혈 가능)</color>");
+            Debug.LogWarning($"<color=green>[BloodManager] 탈출 기준({escapeThresholdBlood}ml) 달성! 탈출 시스템을 활성화합니다.</color>");
             OnFullBelly?.Invoke();
         }
 
         return actualSucked;
     }
 
-    /// <summary>
-    /// [치트] F1 키 입력 시 혈액을 즉시 최대치(200ml)로 충전하고 탈출구 개방
-    /// </summary>
     public void SetBloodFullCheat()
     {
         float added = maxTargetBlood - currentBlood;
@@ -145,9 +169,6 @@ public class BloodManager : MonoBehaviour
         Debug.LogWarning($"<color=cyan>[치트 활성화] F1 입력: 혈액량이 {maxTargetBlood}ml로 즉시 충전되었습니다!</color>");
     }
 
-    /// <summary>
-    /// 게임 종료 시 시간 측정 정지
-    /// </summary>
     public void StopTimer()
     {
         if (isTrackingTime)
@@ -157,9 +178,6 @@ public class BloodManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// 혈액 및 통계 초기화
-    /// </summary>
     public void ResetBlood()
     {
         currentBlood = initialBlood > 0f ? initialBlood : 40f;

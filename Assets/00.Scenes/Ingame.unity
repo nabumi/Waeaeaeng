@@ -602,6 +602,7 @@ GameObject:
   - component: {fileID: 419359923}
   - component: {fileID: 419359925}
   - component: {fileID: 419359924}
+  - component: {fileID: 419359926}
   m_Layer: 3
   m_Name: Zone_Head
   m_TagString: Untagged
@@ -679,6 +680,23 @@ CircleCollider2D:
   m_CompositeOrder: 0
   m_Offset: {x: 1.6115274, y: 0}
   m_Radius: 7.3410654
+--- !u!114 &419359926
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 419359922}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9457b41cdb1934847bf2de2d91366711, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BitingZone
+  zoneType: 2
+  biteMarkPrefab: {fileID: 6775862407718822284, guid: 585f68b1ef6a8ef438f299de0947a485, type: 3}
+  biteMarkRadius: 2
+  useCustomRotation: 0
+  fixedZRotation: 0
 --- !u!1 &456459154
 GameObject:
   m_ObjectHideFlags: 0
@@ -3945,6 +3963,7 @@ GameObject:
   - component: {fileID: 1378767681}
   - component: {fileID: 1378767683}
   - component: {fileID: 1378767682}
+  - component: {fileID: 1378767684}
   m_Layer: 3
   m_Name: Zone_LowerBody
   m_TagString: Untagged
@@ -4050,6 +4069,23 @@ PolygonCollider2D:
       - {x: 2.1939855, y: -12.011147}
       - {x: 5.7516856, y: 1.6487274}
   m_UseDelaunayMesh: 1
+--- !u!114 &1378767684
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1378767680}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9457b41cdb1934847bf2de2d91366711, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BitingZone
+  zoneType: 0
+  biteMarkPrefab: {fileID: 6775862407718822284, guid: 585f68b1ef6a8ef438f299de0947a485, type: 3}
+  biteMarkRadius: 2
+  useCustomRotation: 0
+  fixedZRotation: 0
 --- !u!1 &1404273629
 GameObject:
   m_ObjectHideFlags: 0
@@ -4789,6 +4825,7 @@ GameObject:
   - component: {fileID: 1631319110}
   - component: {fileID: 1631319112}
   - component: {fileID: 1631319111}
+  - component: {fileID: 1631319113}
   m_Layer: 3
   m_Name: Zone_UpperBody
   m_TagString: Untagged
@@ -4906,6 +4943,23 @@ PolygonCollider2D:
       - {x: 5.96192, y: 2.2962568}
       - {x: 5.9887004, y: 11.498541}
   m_UseDelaunayMesh: 1
+--- !u!114 &1631319113
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1631319109}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9457b41cdb1934847bf2de2d91366711, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BitingZone
+  zoneType: 1
+  biteMarkPrefab: {fileID: 6775862407718822284, guid: 585f68b1ef6a8ef438f299de0947a485, type: 3}
+  biteMarkRadius: 2
+  useCustomRotation: 0
+  fixedZRotation: 0
 --- !u!1 &1649229146
 GameObject:
   m_ObjectHideFlags: 0
