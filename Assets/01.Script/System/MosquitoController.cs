@@ -219,7 +219,11 @@ public class MosquitoController : MonoBehaviour
         }
         else if (currentState == MosquitoState.Sucking)
         {
-            // 흡혈 중 스페이스바 누르면 즉시 이륙 탈출
+            // 1. 흡혈 중 대쉬 키(Shift / 우클릭)를 누르면 즉시 바라보는 방향으로 탈출 대시!
+            HandleKeyboardDashCheck();
+            if (isDashing) return;
+
+            // 2. 흡혈 중 스페이스바 누르면 일반 이륙 탈출
             if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
             {
                 PerformTakeOff();
@@ -291,18 +295,40 @@ public class MosquitoController : MonoBehaviour
 
     private void OnDashInputReceived(InputAction.CallbackContext context)
     {
-        if (!context.performed || isDead || currentState != MosquitoState.Flying || isDashing) return;
+        if (!context.performed || isDead || isDashing) return;
+        if (currentState != MosquitoState.Flying && currentState != MosquitoState.Sucking) return;
         PerformDash();
     }
 
     public void PerformDash()
     {
-        if (isDead || currentState != MosquitoState.Flying || isDashing) return;
+        if (isDead || isDashing) return;
+        if (currentState != MosquitoState.Flying && currentState != MosquitoState.Sucking) return;
         if (Time.unscaledTime - lastDashTime < dashCooldown) return;
 
         lastDashTime = Time.unscaledTime;
-        currentDashDirection = (moveInput != Vector2.zero) ? moveInput.normalized : lastNonZeroMoveDirection;
 
+        // 흡혈 도중 대시한 경우: 흉터를 남기고 즉시 비행 상태로 전환
+        if (currentState == MosquitoState.Sucking)
+        {
+            FinishBiteSession();
+            currentState = MosquitoState.Flying;
+            SwitchActionMapSafely("Flying");
+        }
+
+        // 방향 결정: 이동 입력이 있으면 해당 방향, 없으면 현재 바라보는 방향(flipX 기준)
+        if (moveInput != Vector2.zero)
+        {
+            currentDashDirection = moveInput.normalized;
+        }
+        else
+        {
+            // 스프라이트가 왼쪽을 보고 있으면 Vector2.left, 오른쪽을 보고 있으면 Vector2.right
+            Vector2 facingDir = (spriteRenderer != null && spriteRenderer.flipX) ? Vector2.left : Vector2.right;
+            currentDashDirection = facingDir;
+        }
+
+        lastNonZeroMoveDirection = currentDashDirection;
         StartCoroutine(DashRoutine());
     }
 
