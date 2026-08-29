@@ -314,6 +314,7 @@ public class MosquitoController : MonoBehaviour
             FinishBiteSession();
             currentState = MosquitoState.Flying;
             SwitchActionMapSafely("Flying");
+            UpdateAnimationState();
         }
 
         // 방향 결정: 이동 입력이 있으면 해당 방향, 없으면 현재 바라보는 방향(flipX 기준)
