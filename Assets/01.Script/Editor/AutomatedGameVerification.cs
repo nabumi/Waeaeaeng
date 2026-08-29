@@ -62,11 +62,14 @@ public static class AutomatedGameVerification
     private static bool Test1_TitleSceneAndTutorial()
     {
         Log("\n[TEST 1] Verifying Title Scene & Tutorial Graphic Guide...");
-        var scene = EditorSceneManager.OpenScene("Assets/00.Scenes/Title.unity");
-        if (!scene.IsValid())
+        if (!EditorApplication.isPlaying)
         {
-            Log("  [FAIL] Cannot open Title.unity");
-            return false;
+            var scene = EditorSceneManager.OpenScene("Assets/00.Scenes/Title.unity");
+            if (!scene.IsValid())
+            {
+                Log("  [FAIL] Cannot open Title.unity");
+                return false;
+            }
         }
 
         var canvas = GameObject.Find("Canvas");
@@ -105,11 +108,14 @@ public static class AutomatedGameVerification
     private static bool Test2_IngameSceneHierarchyAndHUD()
     {
         Log("\n[TEST 2] Verifying Ingame Scene Hierarchy & HUD...");
-        var scene = EditorSceneManager.OpenScene("Assets/00.Scenes/Ingame.unity");
-        if (!scene.IsValid())
+        if (!EditorApplication.isPlaying)
         {
-            Log("  [FAIL] Cannot open Ingame.unity");
-            return false;
+            var scene = EditorSceneManager.OpenScene("Assets/00.Scenes/Ingame.unity");
+            if (!scene.IsValid())
+            {
+                Log("  [FAIL] Cannot open Ingame.unity");
+                return false;
+            }
         }
 
         var canvas = GameObject.Find("Canvas");
@@ -210,7 +216,7 @@ public static class AutomatedGameVerification
         Log("\n[TEST 6] Verifying GameOver & Cleanup...");
         var goObj = new GameObject("[Test_GameOverUI]");
         var goCtrl = goObj.AddComponent<GameOverUIController>();
-        goCtrl.SendMessage("Awake", SendMessageOptions.DontRequireReceiver);
+        goCtrl.BindComponents();
 
         Log("  [PASS] GameOverUIController auto-binding verified");
         UnityEngine.Object.DestroyImmediate(goObj);
