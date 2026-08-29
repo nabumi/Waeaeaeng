@@ -17,9 +17,14 @@ public class GameClearUIController : MonoBehaviour
 
     [Header("UI 컴포넌트 바인딩")]
     [SerializeField] private CanvasGroup canvasGroup;
+    [SerializeField] private TextMeshProUGUI titleText;
     [SerializeField] private TextMeshProUGUI clearTimeText;
     [SerializeField] private TextMeshProUGUI suckedBloodText;
-    [SerializeField] private TextMeshProUGUI dodgeCountText;
+    [SerializeField] private TextMeshProUGUI scoreText;
+
+    [Header("배경 스프라이트 바인딩")]
+    [SerializeField] private Image backgroundImage;
+    [SerializeField] private Sprite clearSprite;
 
     [Header("버튼 바인딩")]
     [SerializeField] private Button restartButton;
@@ -27,7 +32,7 @@ public class GameClearUIController : MonoBehaviour
     [SerializeField] private Button gameEndButton;
 
     private Coroutine fadeInCoroutine;
-    private float gameStartTime;
+    private Canvas parentCanvas;
 
     private void Awake()
     {
@@ -37,6 +42,8 @@ public class GameClearUIController : MonoBehaviour
             Destroy(gameObject);
             return;
         }
+
+        parentCanvas = GetComponent<Canvas>();
 
         // RectTransform 앵커를 전체 화면으로 설정
         RectTransform rt = GetComponent<RectTransform>();
@@ -54,22 +61,19 @@ public class GameClearUIController : MonoBehaviour
             canvasGroup = GetComponent<CanvasGroup>() ?? gameObject.AddComponent<CanvasGroup>();
         }
 
-        canvasGroup.alpha = 0f;
-        canvasGroup.interactable = false;
-        canvasGroup.blocksRaycasts = false;
-
-        BindButtons();
-        gameObject.SetActive(false);
+        BindComponents();
     }
 
     private void Start()
     {
-        gameStartTime = Time.time;
+        if (Instance == null) Instance = this;
+        EnsureBackgroundSprite();
     }
 
     private void OnEnable()
     {
         EscapeSystem.OnGameClear += ShowGameClearUI;
+        EnsureBackgroundSprite();
     }
 
     private void OnDisable()
@@ -77,8 +81,132 @@ public class GameClearUIController : MonoBehaviour
         EscapeSystem.OnGameClear -= ShowGameClearUI;
     }
 
-    private void BindButtons()
+#if UNITY_EDITOR
+    private void OnValidate()
     {
+        BindComponents();
+        EnsureBackgroundSprite();
+    }
+#endif
+
+    private void EnsureBackgroundSprite()
+    {
+        if (backgroundImage == null)
+        {
+            var t = FindChildRecursive(transform, "Image", "Background", "배경");
+            if (t != null) backgroundImage = t.GetComponent<Image>();
+        }
+
+        if (backgroundImage != null)
+        {
+            if (clearSprite != null)
+            {
+                backgroundImage.sprite = clearSprite;
+                backgroundImage.color = Color.white;
+                return;
+            }
+
+            // 파일에서 직접 32-bit PNG 텍스처를 로드하여 스프라이트 생성
+            string[] candidatePaths = new string[]
+            {
+                System.IO.Path.Combine(Application.dataPath, "02.Resource/ui/gameclear.png"),
+                System.IO.Path.Combine(Application.dataPath, "Resources/ui/gameclear.png"),
+                System.IO.Path.Combine(Application.dataPath, "02.Resource/gameclear.png")
+            };
+
+            foreach (var p in candidatePaths)
+            {
+                if (System.IO.File.Exists(p))
+                {
+                    try
+                    {
+                        byte[] bytes = System.IO.File.ReadAllBytes(p);
+                        Texture2D tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                        if (tex.LoadImage(bytes))
+                        {
+                            tex.filterMode = FilterMode.Bilinear;
+                            Sprite spr = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f);
+                            spr.name = "gameclear_runtime";
+                            clearSprite = spr;
+                            backgroundImage.sprite = spr;
+                            backgroundImage.color = Color.white;
+                            Debug.LogWarning($"<color=green>[GameClearUIController] '{p}' 에서 gameclear 이미지를 정상 로드하여 스프라이트로 배정했습니다! ({tex.width}x{tex.height})</color>");
+                            return;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogWarning($"[GameClearUIController] 이미지 로드 중 예외: {ex.Message}");
+                    }
+                }
+            }
+
+            // Resources.Load 폴백
+            var resSprite = Resources.Load<Sprite>("ui/gameclear") ?? Resources.Load<Sprite>("gameclear");
+            if (resSprite != null)
+            {
+                clearSprite = resSprite;
+                backgroundImage.sprite = resSprite;
+                backgroundImage.color = Color.white;
+            }
+        }
+    }
+
+    private void BindComponents()
+    {
+        EnsureBackgroundSprite();
+
+        // 1. "점수위치" 컨테이너에서 값 텍스트 정밀 탐색
+        var scoreValueContainer = FindChildRecursive(transform, "점수위치");
+        if (scoreValueContainer != null)
+        {
+            for (int i = 0; i < scoreValueContainer.childCount; i++)
+            {
+                var child = scoreValueContainer.GetChild(i);
+                var tmp = child.GetComponent<TextMeshProUGUI>();
+                if (tmp == null) continue;
+
+                if (child.name.Contains("시간") || child.name.Contains("Time") || child.name.Contains("생존") || child.name.Contains("클리어"))
+                {
+                    clearTimeText = tmp;
+                }
+                else if (child.name.Contains("흡혈") || child.name.Contains("Blood") || child.name.Contains("피"))
+                {
+                    suckedBloodText = tmp;
+                }
+                else if (child.name.Contains("점수") || child.name.Contains("Score"))
+                {
+                    scoreText = tmp;
+                }
+            }
+        }
+
+        // 예비 fallback 텍스트 바인딩
+        if (clearTimeText == null)
+        {
+            var t = FindChildRecursive(transform, "Time", "클리어시간", "생존시간", "시간");
+            if (t != null) clearTimeText = t.GetComponent<TextMeshProUGUI>();
+        }
+
+        if (suckedBloodText == null)
+        {
+            var t = FindChildRecursive(transform, "Blood", "흡혈량", "피");
+            if (t != null) suckedBloodText = t.GetComponent<TextMeshProUGUI>();
+        }
+
+        if (scoreText == null)
+        {
+            var t = FindChildRecursive(transform, "Score", "점수");
+            if (t != null) scoreText = t.GetComponent<TextMeshProUGUI>();
+        }
+
+        if (titleText == null)
+        {
+            var t = FindChildRecursive(transform, "Title", "GameClearText", "제목");
+            if (t != null) titleText = t.GetComponent<TextMeshProUGUI>();
+        }
+
+        // 버튼 바인딩
         if (restartButton == null)
         {
             var t = FindChildRecursive(transform, "restart", "재시작", "retry");
@@ -131,9 +259,13 @@ public class GameClearUIController : MonoBehaviour
         return null;
     }
 
+    /// <summary>
+    /// 모기 탈출 성공 시 게임 클리어(승리) 화면 출력
+    /// </summary>
     public void ShowGameClearUI()
     {
         gameObject.SetActive(true);
+        if (parentCanvas != null) parentCanvas.enabled = true;
         transform.SetAsLastSibling();
 
         for (int i = 0; i < transform.childCount; i++)
@@ -141,7 +273,7 @@ public class GameClearUIController : MonoBehaviour
             transform.GetChild(i).gameObject.SetActive(true);
         }
 
-        BindButtons();
+        BindComponents();
         UpdateStats();
 
         AudioManager.Instance?.PlaySFX(AudioManager.SFXType.Victory);
@@ -152,25 +284,38 @@ public class GameClearUIController : MonoBehaviour
 
     private void UpdateStats()
     {
-        float elapsed = Time.time - gameStartTime;
-        int minutes = Mathf.FloorToInt(elapsed / 60f);
-        int seconds = Mathf.FloorToInt(elapsed % 60f);
+        float survivalSec = BloodManager.Instance != null ? BloodManager.Instance.SurvivalTime : Time.timeSinceLevelLoad;
+        int minutes = Mathf.FloorToInt(survivalSec / 60f);
+        int seconds = Mathf.FloorToInt(survivalSec % 60f);
+        string timeStr = $"{minutes:00}:{seconds:00}";
 
         if (clearTimeText != null)
         {
-            clearTimeText.text = $"클리어 시간: {minutes:00}:{seconds:00}";
+            clearTimeText.text = timeStr;
         }
+
+        float suckedBlood = BloodManager.Instance != null ? BloodManager.Instance.TotalSuckedBlood : 0f;
+        int suckedInt = Mathf.RoundToInt(suckedBlood);
+        string bloodStr = $"{suckedInt} ml";
 
         if (suckedBloodText != null)
         {
-            int sucked = BloodManager.Instance != null ? Mathf.RoundToInt(BloodManager.Instance.TotalSuckedBlood) : 100;
-            suckedBloodText.text = $"총 흡혈량: {sucked}ml";
+            suckedBloodText.text = bloodStr;
         }
+
+        // 클리어 보너스 1000점 포함 점수 계산
+        int totalScore = (Mathf.FloorToInt(survivalSec) * 10) + (suckedInt * 20) + 1000;
+        if (scoreText != null)
+        {
+            scoreText.text = $"{totalScore:N0} 점";
+        }
+
+        Debug.LogWarning($"<color=green>[GameClearUIController] 승리 결과창 통계 갱신 -> 클리어 시간: {timeStr}, 흡혈량: {bloodStr}, 최종 점수: {totalScore}</color>");
     }
 
     private IEnumerator FadeInRoutine()
     {
-        if (canvasGroup == null) canvasGroup = GetComponent<CanvasGroup>();
+        if (canvasGroup == null) canvasGroup = GetComponent<CanvasGroup>() ?? gameObject.AddComponent<CanvasGroup>();
 
         canvasGroup.alpha = 0f;
         canvasGroup.interactable = false;
@@ -186,6 +331,7 @@ public class GameClearUIController : MonoBehaviour
 
         canvasGroup.alpha = 1.0f;
         canvasGroup.interactable = true;
+        Debug.Log("<color=green>[GameClearUIController] 클리어 화면 페이드인 완료</color>");
     }
 
     public void OnRestartClicked()

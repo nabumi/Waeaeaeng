@@ -58,38 +58,22 @@ public class GameOverUIController : MonoBehaviour
             canvasGroup = GetComponent<CanvasGroup>() ?? gameObject.AddComponent<CanvasGroup>();
         }
 
-        canvasGroup.alpha = 0f;
-        canvasGroup.interactable = false;
-        canvasGroup.blocksRaycasts = false;
-
         BindComponents();
-
-        if (parentCanvas != null) parentCanvas.enabled = false;
-        gameObject.SetActive(false);
     }
 
     private void Start()
     {
-        if (canvasGroup != null)
-        {
-            canvasGroup.alpha = 0f;
-            canvasGroup.interactable = false;
-            canvasGroup.blocksRaycasts = false;
-        }
-        if (parentCanvas != null) parentCanvas.enabled = false;
-        gameObject.SetActive(false);
+        if (Instance == null) Instance = this;
     }
 
     private void OnEnable()
     {
         MosquitoController.OnGameOver += ShowGameOverUI;
-        EscapeSystem.OnGameClear += ShowGameClearUI;
     }
 
     private void OnDisable()
     {
         MosquitoController.OnGameOver -= ShowGameOverUI;
-        EscapeSystem.OnGameClear -= ShowGameClearUI;
     }
 
     private void BindComponents()
@@ -216,6 +200,12 @@ public class GameOverUIController : MonoBehaviour
     /// </summary>
     public void ShowGameClearUI()
     {
+        if (GameClearUIController.Instance != null)
+        {
+            GameClearUIController.Instance.ShowGameClearUI();
+            return;
+        }
+
         AudioManager.Instance?.PlaySFX(AudioManager.SFXType.Victory);
         OpenResultPanel(isClear: true);
     }
