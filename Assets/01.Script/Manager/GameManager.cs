@@ -86,6 +86,22 @@ public class GameManager : MonoBehaviour
         return null;
     }
 
+    private Transform FindChildRecursive(Transform parent, string targetName)
+    {
+        if (parent == null) return null;
+        for (int i = 0; i < parent.childCount; i++)
+        {
+            var child = parent.GetChild(i);
+            if (child.name.Equals(targetName, System.StringComparison.OrdinalIgnoreCase))
+            {
+                return child;
+            }
+            var sub = FindChildRecursive(child, targetName);
+            if (sub != null) return sub;
+        }
+        return null;
+    }
+
     private void EnsureUIControllers()
     {
         // 1. gameover 및 gameclear 오브젝트 찾아서 UIController 부착 및 초기 비활성화 보장
