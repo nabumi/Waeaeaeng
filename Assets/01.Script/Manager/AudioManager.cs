@@ -153,7 +153,7 @@ public class AudioManager : MonoBehaviour
             mosquitoBuzzSource.loop = true;
             mosquitoBuzzSource.playOnAwake = false;
             mosquitoBuzzSource.spatialBlend = 0f; // 2D 사운드
-            mosquitoBuzzSource.volume = 0.4f * sfxVolume * masterVolume;
+            mosquitoBuzzSource.volume = 0.08f * sfxVolume * masterVolume; // 기존 0.4 대비 80% 감소
         }
     }
 
@@ -235,7 +235,7 @@ public class AudioManager : MonoBehaviour
         sfxSource.PlayOneShot(clip, sfxVolume * masterVolume * volumeMultiplier);
     }
 
-    public void StartMosquitoBuzz(float volume = 0.4f)
+    public void StartMosquitoBuzz(float volume = 0.08f)
     {
         if (mosquitoBuzzSource == null) return;
         if (mosquitoBuzzClip != null && mosquitoBuzzSource.clip != mosquitoBuzzClip)
@@ -248,7 +248,7 @@ public class AudioManager : MonoBehaviour
             mosquitoBuzzSource.spatialBlend = 0f;
             mosquitoBuzzSource.volume = volume * sfxVolume * masterVolume;
             mosquitoBuzzSource.Play();
-            Debug.Log("<color=cyan>[AudioManager] 모기 날갯짓 루프 재생 시작</color>");
+            Debug.Log("<color=cyan>[AudioManager] 모기 날갯짓 루프 재생 시작 (볼륨 0.08)</color>");
         }
     }
 
