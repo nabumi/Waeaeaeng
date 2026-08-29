@@ -80,7 +80,11 @@ public class BitingZone : MonoBehaviour
             mark.transform.Rotate(0f, 0f, Random.Range(0f, 360f));
             
             var sr = mark.GetComponent<SpriteRenderer>();
-            if (sr != null) sr.color = biteMarkColor;
+            if (sr != null)
+            {
+                sr.sortingOrder = 1; // 모기(Order 10)보다 아래, 피부 위에 렌더링
+                sr.color = biteMarkColor;
+            }
         }
         else
         {
@@ -92,14 +96,14 @@ public class BitingZone : MonoBehaviour
             if (biteMarkSprite != null)
             {
                 GameObject mark = new GameObject("BiteMark");
-                mark.transform.position = new Vector3(bitePosition.x, bitePosition.y, 0f);
+                mark.transform.position = new Vector3(bitePosition.x, bitePosition.y, 0.05f);
                 mark.transform.SetParent(transform);
                 mark.transform.localScale = Vector3.one * biteMarkScale;
                 mark.transform.Rotate(0f, 0f, Random.Range(0f, 360f));
 
                 SpriteRenderer sr = mark.AddComponent<SpriteRenderer>();
                 sr.sprite = biteMarkSprite;
-                sr.sortingOrder = 5; // 피부 위에 렌더링
+                sr.sortingOrder = 1; // 모기(Order 10)보다 아래, 피부 위에 렌더링
                 sr.color = biteMarkColor; // 자연스러운 붉은 모기 부기 색상 적용
             }
         }
