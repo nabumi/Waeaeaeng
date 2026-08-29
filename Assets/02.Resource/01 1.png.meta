@@ -93,6 +93,19 @@ TextureImporter:
     ignorePlatformSupport: 0
     androidETC2FallbackOverride: 0
     forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: WebGL
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 0
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
   spriteSheet:
     serializedVersion: 2
     sprites:
@@ -100,12 +113,12 @@ TextureImporter:
       name: 01 1_0
       rect:
         serializedVersion: 2
-        x: 44
-        y: 58
-        width: 7
-        height: 25
+        x: 0
+        y: 0
+        width: 124
+        height: 124
       alignment: 0
-      pivot: {x: 0.5, y: 0.5}
+      pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -114,50 +127,6 @@ TextureImporter:
       bones: []
       spriteID: 969173fd1a6256f42a9f0224824aa10b
       internalID: 1949742502
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: 01 1_1
-      rect:
-        serializedVersion: 2
-        x: 45
-        y: 35
-        width: 34
-        height: 48
-      alignment: 0
-      pivot: {x: 0.5, y: 0.5}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: 0
-      bones: []
-      spriteID: bac5f4f1930de424eb3ab58435ffdbe6
-      internalID: -1951324301
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: 01 1_2
-      rect:
-        serializedVersion: 2
-        x: 73
-        y: 58
-        width: 7
-        height: 25
-      alignment: 0
-      pivot: {x: 0.5, y: 0.5}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: 0
-      bones: []
-      spriteID: 6cd10225491012245bd40944be601bea
-      internalID: -1164421296
       vertices: []
       indices: 
       edges: []
@@ -181,6 +150,7 @@ TextureImporter:
       01 1_0: 1949742502
       01 1_1: -1951324301
       01 1_2: -1164421296
+      01 1_3: 1980768207
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
