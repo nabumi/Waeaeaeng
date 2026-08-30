@@ -108,6 +108,10 @@ public class MosquitoController : MonoBehaviour
         rb = GetComponent<Rigidbody2D>();
         playerInput = GetComponent<PlayerInput>();
         animator = GetComponent<Animator>() ?? GetComponentInChildren<Animator>();
+        if (animator != null)
+        {
+            animator.updateMode = AnimatorUpdateMode.UnscaledTime; // 슬로우모션 중에도 애니메이션 프레임 유지
+        }
         spriteRenderer = GetComponent<SpriteRenderer>() ?? GetComponentInChildren<SpriteRenderer>();
         rb.gravityScale = 0f;
 
@@ -423,6 +427,10 @@ public class MosquitoController : MonoBehaviour
 
         AudioManager.Instance?.PlaySFX(AudioManager.SFXType.Dash);
         UpdateAnimationState();
+        if (animator != null)
+        {
+            animator.Play("IsDashing", 0, 0f);
+        }
 
         Debug.Log($"<color=yellow>[MosquitoController] ⚡ 닷지(대시) 발동! (슬로우모션 Time.timeScale = {Time.timeScale:F2}, 지속시간 = {dashDuration}s)</color>");
 
