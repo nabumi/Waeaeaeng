@@ -1,5 +1,8 @@
+using System;
 using System.Collections;
 using UnityEngine;
+using Object = UnityEngine.Object;
+using Random = UnityEngine.Random;
 
 /// <summary>
 /// 인간의 분노 스택 관리 및 손바닥 공격 시퀀스를 제어하는 싱글톤 매니저 클래스.
@@ -35,6 +38,9 @@ public class HumanAngerManager : MonoBehaviour
     [Tooltip("1회 회피할 때마다 추가되는 분노 계수")]
     [SerializeField] private float angerPerDodge = 0.25f;
 
+    [Tooltip("최대 분노 스택 (게이지 100% 도달 기준 회피 횟수)")]
+    [SerializeField] private int maxAngerStack = 10;
+
     private int dodgeCount = 0;
     private float currentAngerMultiplier = 1.0f;
 
@@ -43,6 +49,26 @@ public class HumanAngerManager : MonoBehaviour
     /// 현재 인간의 분노 배율 ($A_{\text{mult}} \ge 1.0$)
     /// </summary>
     public float CurrentAngerMultiplier => currentAngerMultiplier;
+
+    /// <summary>
+    /// 현재 누적 회피 횟수 (분노 스택)
+    /// </summary>
+    public int DodgeCount => dodgeCount;
+
+    /// <summary>
+    /// 최대 분노 스택 기준치
+    /// </summary>
+    public int MaxAngerStack => maxAngerStack;
+
+    /// <summary>
+    /// 게이지 표시용 분노 비율 (0.0 ~ 1.0)
+    /// </summary>
+    public float AngerFillRatio => Mathf.Clamp01((float)dodgeCount / Mathf.Max(1, maxAngerStack));
+
+    /// <summary>
+    /// 분노 스택 변동 이벤트 (현재 스택, 0~1 게이지 비율)
+    /// </summary>
+    public event Action<int, float> OnAngerStackChanged;
 
     private bool isAttacking = false;
     private Camera cachedMainCamera;
@@ -163,12 +189,14 @@ public class HumanAngerManager : MonoBehaviour
         dodgeCount++;
         currentAngerMultiplier = 1.0f + (dodgeCount * angerPerDodge);
         Debug.Log($"<color=yellow>[회피 성공!] 분노 스택: {dodgeCount} | 배율: {currentAngerMultiplier:F2}x</color>");
+        OnAngerStackChanged?.Invoke(dodgeCount, AngerFillRatio);
     }
 
     public void ResetAnger()
     {
         dodgeCount = 0;
         currentAngerMultiplier = 1.0f;
+        OnAngerStackChanged?.Invoke(dodgeCount, AngerFillRatio);
     }
 
     private void OnDrawGizmosSelected()

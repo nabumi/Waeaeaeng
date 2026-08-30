@@ -5077,6 +5077,8 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 64
   angerPerDodge: 0.2
+  maxAngerStack: 10
+  maxAngerStack: 10
 --- !u!114 &1090765289
 MonoBehaviour:
   m_ObjectHideFlags: 0
