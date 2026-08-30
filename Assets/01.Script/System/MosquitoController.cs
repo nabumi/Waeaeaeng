@@ -46,10 +46,10 @@ public class MosquitoController : MonoBehaviour
     [SerializeField] private float dashBloodCost = 5.0f;
 
     [Header("대시 및 불릿 타임 설정")]
-    [SerializeField] private float dashSpeedMultiplier = 2.8f;
-    [SerializeField] private float dashDuration = 0.35f;
+    [SerializeField] private float dashSpeedMultiplier = 1.5f;
+    [SerializeField] private float dashDuration = 0.15f;
     [SerializeField] private float slowTimeScale = 0.2f;
-    [SerializeField] private float dashCooldown = 0.8f;
+    [SerializeField] private float dashCooldown = 0.6f;
 
     private bool isDashing = false;
     public bool IsDashing => isDashing;
@@ -88,6 +88,7 @@ public class MosquitoController : MonoBehaviour
     private Animator animator;
     private SpriteRenderer spriteRenderer;
     [SerializeField] private Sprite deathSprite;
+    [SerializeField] private Sprite dodgeSprite;
     private Vector2 moveInput;
 
     private InputAction checkAction;
@@ -106,8 +107,8 @@ public class MosquitoController : MonoBehaviour
     {
         rb = GetComponent<Rigidbody2D>();
         playerInput = GetComponent<PlayerInput>();
-        animator = GetComponentInChildren<Animator>();
-        spriteRenderer = GetComponentInChildren<SpriteRenderer>() ?? GetComponent<SpriteRenderer>();
+        animator = GetComponent<Animator>() ?? GetComponentInChildren<Animator>();
+        spriteRenderer = GetComponent<SpriteRenderer>() ?? GetComponentInChildren<SpriteRenderer>();
         rb.gravityScale = 0f;
 
         // [추가] 자식 오브젝트에서 MosquitoTailSync 자동 탐색
@@ -414,27 +415,81 @@ public class MosquitoController : MonoBehaviour
         Time.timeScale = effectiveSlow;
         Time.fixedDeltaTime = 0.02f * Time.timeScale;
 
-        if (spriteRenderer != null)
+        // [요청 반영] 꼬리 뒤쪽(모기 본체 크기만큼 뒤)에 모기 크기의 1.5배 크기로 닷지 이펙트 생성
+        if (dodgeSprite != null)
         {
-            spriteRenderer.color = new Color(1f, 1f, 0.4f, 1f); // 대시 중 황금빛 잔상 플래시
+            StartCoroutine(SpawnDodgeEffectRoutine());
         }
 
         AudioManager.Instance?.PlaySFX(AudioManager.SFXType.Dash);
         UpdateAnimationState();
 
-        Debug.Log($"<color=yellow>[MosquitoController] ⚡ 불릿타임 대시 발동! (슬로우모션 Time.timeScale = {Time.timeScale:F2}, 지속시간 = {dashDuration}s)</color>");
+        Debug.Log($"<color=yellow>[MosquitoController] ⚡ 닷지(대시) 발동! (슬로우모션 Time.timeScale = {Time.timeScale:F2}, 지속시간 = {dashDuration}s)</color>");
 
         yield return new WaitForSecondsRealtime(dashDuration);
 
         isDashing = false;
         ResetTimeScale();
+        UpdateAnimationState();
+    }
 
-        if (spriteRenderer != null)
+    /// <summary>
+    /// 모기 꼬리 뒤쪽에 본체 크기만큼 뒤, 모기 실제 크기의 정확한 1.5배 크기로 dodge 잔상을 출력하고 자연스럽게 페이드아웃
+    /// </summary>
+    private IEnumerator SpawnDodgeEffectRoutine()
+    {
+        if (dodgeSprite == null) yield break;
+
+        GameObject dodgeObj = new GameObject("DodgeEffect");
+        SpriteRenderer sr = dodgeObj.AddComponent<SpriteRenderer>();
+        sr.sprite = dodgeSprite;
+        sr.sortingOrder = 9; // 모기 본체(10) 바로 뒤 레이어
+        sr.flipX = !isFacingRight; // 모기 방향과 일치
+
+        // 1. 모기 본체의 실제 월드 크기 산출
+        Vector2 mosquitoSize = spriteRenderer != null ? (Vector2)spriteRenderer.bounds.size : new Vector2(1.5f, 1.0f);
+        if (mosquitoSize.x <= 0.01f) mosquitoSize = new Vector2(1.5f, 1.0f);
+
+        // 2. dodgeSprite 고해상도(1672x941 등) 텍스처를 고려하여 모기 본체의 1.5배 크기로 스케일 정밀 계산
+        Vector2 dodgeSpriteWorldSize = dodgeSprite.rect.size / dodgeSprite.pixelsPerUnit;
+        if (dodgeSpriteWorldSize.x <= 0.01f) dodgeSpriteWorldSize = Vector2.one;
+
+        float targetWidth = mosquitoSize.x * 1.5f;
+        float finalScale = targetWidth / dodgeSpriteWorldSize.x;
+        dodgeObj.transform.localScale = new Vector3(finalScale, finalScale, 1f);
+
+        // 3. 꼬리 뒤쪽 위치: 모기 본체 크기만큼 정확히 뒤쪽에 배치
+        Vector3 backDirection = isFacingRight ? Vector3.left : Vector3.right;
+        float offsetDistance = Mathf.Max(0.7f, mosquitoSize.x * 0.85f);
+        dodgeObj.transform.position = transform.position + (backDirection * offsetDistance);
+
+        float effectDuration = 1.0f; // [요청 반영] 1.0초 동안 유지
+        float timer = 0f;
+        Color initialColor = Color.white;
+
+        while (timer < effectDuration)
         {
-            spriteRenderer.color = Color.white;
+            timer += Time.unscaledDeltaTime;
+            float progress = Mathf.Clamp01(timer / effectDuration);
+            
+            if (sr != null)
+            {
+                // 초반 0.6초는 선명하게(Alpha 0.9) 유지하다가 후반부에 부드럽게 페이드아웃
+                float alpha = progress < 0.6f 
+                    ? Mathf.Lerp(0.95f, 0.8f, progress / 0.6f) 
+                    : Mathf.Lerp(0.8f, 0f, (progress - 0.6f) / 0.4f);
+
+                Color c = initialColor;
+                c.a = alpha;
+                sr.color = c;
+            }
+            yield return null;
         }
 
-        UpdateAnimationState();
+        if (dodgeObj != null)
+        {
+            Destroy(dodgeObj);
+        }
     }
 
     private void ResetTimeScale()
