@@ -434,24 +434,34 @@ public class MosquitoController : MonoBehaviour
     }
 
     /// <summary>
-    /// 모기 꼬리 뒤쪽에 본체 크기(약 1.5유닛)만큼 뒤, 본체의 1.5배 크기로 dodge 잔상을 출력하고 자연스럽게 페이드아웃
+    /// 모기 꼬리 뒤쪽에 본체 크기만큼 뒤, 모기 실제 크기의 정확한 1.5배 크기로 dodge 잔상을 출력하고 자연스럽게 페이드아웃
     /// </summary>
     private IEnumerator SpawnDodgeEffectRoutine()
     {
-        GameObject dodgeObj = new GameObject("DodgeEffect");
-        
-        // 꼬리 뒤쪽 위치 계산: 바라보는 방향의 반대쪽으로 모기 본체 크기(1.5f)만큼 뒤
-        Vector3 backDirection = isFacingRight ? Vector3.left : Vector3.right;
-        dodgeObj.transform.position = transform.position + (backDirection * 1.5f);
-        
-        // 모기 크기의 1.5배 크기 설정
-        float scaleMultiplier = 1.5f;
-        dodgeObj.transform.localScale = new Vector3(scaleMultiplier, scaleMultiplier, 1f);
+        if (dodgeSprite == null) yield break;
 
+        GameObject dodgeObj = new GameObject("DodgeEffect");
         SpriteRenderer sr = dodgeObj.AddComponent<SpriteRenderer>();
         sr.sprite = dodgeSprite;
         sr.sortingOrder = 9; // 모기 본체(10) 바로 뒤 레이어
         sr.flipX = !isFacingRight; // 모기 방향과 일치
+
+        // 1. 모기 본체의 실제 월드 크기 산출
+        Vector2 mosquitoSize = spriteRenderer != null ? (Vector2)spriteRenderer.bounds.size : new Vector2(1.5f, 1.0f);
+        if (mosquitoSize.x <= 0.01f) mosquitoSize = new Vector2(1.5f, 1.0f);
+
+        // 2. dodgeSprite 고해상도(1672x941 등) 텍스처를 고려하여 모기 본체의 1.5배 크기로 스케일 정밀 계산
+        Vector2 dodgeSpriteWorldSize = dodgeSprite.rect.size / dodgeSprite.pixelsPerUnit;
+        if (dodgeSpriteWorldSize.x <= 0.01f) dodgeSpriteWorldSize = Vector2.one;
+
+        float targetWidth = mosquitoSize.x * 1.5f;
+        float finalScale = targetWidth / dodgeSpriteWorldSize.x;
+        dodgeObj.transform.localScale = new Vector3(finalScale, finalScale, 1f);
+
+        // 3. 꼬리 뒤쪽 위치: 모기 본체 크기만큼 정확히 뒤쪽에 배치
+        Vector3 backDirection = isFacingRight ? Vector3.left : Vector3.right;
+        float offsetDistance = Mathf.Max(0.7f, mosquitoSize.x * 0.85f);
+        dodgeObj.transform.position = transform.position + (backDirection * offsetDistance);
 
         float effectDuration = Mathf.Max(0.2f, dashDuration);
         float timer = 0f;
@@ -465,7 +475,7 @@ public class MosquitoController : MonoBehaviour
             if (sr != null)
             {
                 Color c = initialColor;
-                c.a = Mathf.Lerp(1.0f, 0f, progress);
+                c.a = Mathf.Lerp(0.85f, 0f, progress);
                 sr.color = c;
             }
             yield return null;
