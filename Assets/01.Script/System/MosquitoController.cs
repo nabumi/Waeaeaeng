@@ -107,8 +107,8 @@ public class MosquitoController : MonoBehaviour
     {
         rb = GetComponent<Rigidbody2D>();
         playerInput = GetComponent<PlayerInput>();
-        animator = GetComponentInChildren<Animator>();
-        spriteRenderer = GetComponentInChildren<SpriteRenderer>() ?? GetComponent<SpriteRenderer>();
+        animator = GetComponent<Animator>() ?? GetComponentInChildren<Animator>();
+        spriteRenderer = GetComponent<SpriteRenderer>() ?? GetComponentInChildren<SpriteRenderer>();
         rb.gravityScale = 0f;
 
         // [추가] 자식 오브젝트에서 MosquitoTailSync 자동 탐색
