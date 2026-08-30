@@ -18,8 +18,32 @@ public class CameraFollow2D : MonoBehaviour
     [Tooltip("2D 카메라 생존을 위해 Z축은 -10을 유지해야 합니다.")]
     [SerializeField] private Vector3 offset = new Vector3(0f, 0f, -10f);
 
-    // SmoothDamp 내부 속도 계산 변수 (GC 방지를 위해 필드 선언)
+    public static CameraFollow2D Instance { get; private set; }
+
+    [Header("대시 시 다이내믹 줌(확대) 설정")]
+    [Tooltip("대시 시 카메라 확대 배율 (0.85 = 기본 시야의 85%로 줌인/확대)")]
+    [Range(0.5f, 1f)]
+    [SerializeField] private float dashZoomMultiplier = 0.85f;
+    [Tooltip("줌 확대/복귀 보간 시간 (초)")]
+    [SerializeField] private float zoomSmoothTime = 0.12f;
+
+    private Camera cam;
+    private float defaultOrthoSize = 5f;
+    private float targetOrthoSize = 5f;
+    private float zoomVelocity = 0f;
     private Vector3 currentVelocity = Vector3.zero;
+    private Coroutine activeZoomCoroutine;
+
+    private void Awake()
+    {
+        if (Instance == null) Instance = this;
+        cam = GetComponent<Camera>() ?? Camera.main;
+        if (cam != null)
+        {
+            defaultOrthoSize = cam.orthographicSize;
+            targetOrthoSize = defaultOrthoSize;
+        }
+    }
 
     private void LateUpdate()
     {
@@ -36,6 +60,59 @@ public class CameraFollow2D : MonoBehaviour
             ref currentVelocity,    // 현재 속도 참조 (내부 연산용)
             smoothTime              // 도달 시간
         );
+
+        // 4. 카메라 줌인(확대) 보간
+        if (cam != null)
+        {
+            cam.orthographicSize = Mathf.SmoothDamp(
+                cam.orthographicSize,
+                targetOrthoSize,
+                ref zoomVelocity,
+                zoomSmoothTime,
+                Mathf.Infinity,
+                Time.unscaledDeltaTime
+            );
+        }
+    }
+
+    /// <summary>
+    /// 대시 발동 시 호출되어 지정된 시간 동안 카메라를 역동적으로 확대(Zoom-in)합니다.
+    /// </summary>
+    /// <param name="duration">대시 지속 시간 (초)</param>
+    public void TriggerDashZoom(float duration)
+    {
+        if (activeZoomCoroutine != null)
+        {
+            StopCoroutine(activeZoomCoroutine);
+        }
+        activeZoomCoroutine = StartCoroutine(DashZoomRoutine(duration));
+    }
+
+    private System.Collections.IEnumerator DashZoomRoutine(float duration)
+    {
+        // 1. 줌인 (확대)
+        targetOrthoSize = defaultOrthoSize * dashZoomMultiplier;
+
+        // 2. 대시 시간 동안 줌 유지
+        yield return new WaitForSecondsRealtime(duration);
+
+        // 3. 원래 시야로 부드럽게 복귀
+        targetOrthoSize = defaultOrthoSize;
+        activeZoomCoroutine = null;
+    }
+
+    /// <summary>
+    /// 즉각 원래 시야로 리셋
+    /// </summary>
+    public void ResetZoomImmediate()
+    {
+        if (activeZoomCoroutine != null)
+        {
+            StopCoroutine(activeZoomCoroutine);
+            activeZoomCoroutine = null;
+        }
+        targetOrthoSize = defaultOrthoSize;
+        if (cam != null) cam.orthographicSize = defaultOrthoSize;
     }
 
     #region 시각화 디버깅 (Visual Debugging)

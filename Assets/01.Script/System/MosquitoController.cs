@@ -55,6 +55,9 @@ public class MosquitoController : MonoBehaviour
 
     private bool isDashing = false;
     public bool IsDashing => isDashing;
+    public bool IsDead => isDead;
+    public MosquitoState CurrentState => currentState;
+    public bool IsFacingRight => isFacingRight;
     private float lastDashTime = -999f;
     private Vector2 currentDashDirection = Vector2.right;
 
@@ -137,6 +140,12 @@ public class MosquitoController : MonoBehaviour
         if (currentBlood <= 0f) currentBlood = 40f;
 
         EnsureBloodGauge();
+
+        // [그림자 연동] 모기 2.5D 그림자 컨트롤러 자동 구성
+        if (GetComponent<MosquitoShadowController>() == null)
+        {
+            gameObject.AddComponent<MosquitoShadowController>();
+        }
     }
 
     private void OnEnable()
@@ -418,6 +427,10 @@ public class MosquitoController : MonoBehaviour
     {
         isDashing = true;
 
+        // [후처리 연동] 시네마틱 불릿타임 포스트 프로세싱 & 카메라 다이내믹 줌인 발동
+        BulletTimePostProcessController.Instance?.TriggerBulletTimeEffect(dashDuration);
+        CameraFollow2D.Instance?.TriggerDashZoom(dashDuration);
+
         // 인스펙터 값이 1 이상이거나 비정상일 경우 안전하게 0.2f (5배 슬로우) 적용
         float effectiveSlow = (slowTimeScale > 0.01f && slowTimeScale < 0.95f) ? slowTimeScale : 0.2f;
         Time.timeScale = effectiveSlow;
@@ -508,6 +521,8 @@ public class MosquitoController : MonoBehaviour
     {
         Time.timeScale = 1.0f;
         Time.fixedDeltaTime = 0.02f;
+        BulletTimePostProcessController.Instance?.ResetEffectImmediate();
+        CameraFollow2D.Instance?.ResetZoomImmediate();
     }
 
     #endregion
