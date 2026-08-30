@@ -1,4 +1,4 @@
-﻿%YAML 1.1
+%YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
 --- !u!29 &1
 OcclusionCullingSettings:
@@ -1679,7 +1679,6 @@ MonoBehaviour:
   hoverFrequency: 1
   flightBloodDrainRate: 1.5
   dashBloodCost: 5
-  dashSpeedMultiplier: 1.5
   targetDashDistance: 2.5
   dashDuration: 0.42
   slowTimeScale: 0.2
@@ -5078,7 +5077,6 @@ MonoBehaviour:
     m_Bits: 64
   angerPerDodge: 0.2
   maxAngerStack: 10
-  maxAngerStack: 10
 --- !u!114 &1090765289
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -7038,6 +7036,8 @@ MonoBehaviour:
   target: {fileID: 636591777}
   smoothTime: 0.2
   offset: {x: 0, y: 0, z: -10}
+  dashZoomMultiplier: 0.85
+  zoomSmoothTime: 0.12
 --- !u!1 &1686410170
 GameObject:
   m_ObjectHideFlags: 0
@@ -8935,6 +8935,13 @@ MonoBehaviour:
   safeSprite: {fileID: 1949742502, guid: 7827df01d942c264193b4e819ae9ce6d, type: 3}
   warningSprite: {fileID: -495237342, guid: bd6435b67ecbb904c950ab61dcf82ce7, type: 3}
   dangerSprite: {fileID: -300529337, guid: e6a9d9190f8f59d4b96ae8a1462aa4b6, type: 3}
+  angerFillImage: {fileID: 0}
+  angerFillSprite: {fileID: 0}
+  angerColor: {r: 0.95, g: 0.15, b: 0.15, a: 0.95}
+  maxAngerColor: {r: 1, g: 0.05, b: 0.05, a: 1}
+  fillLerpSpeed: 5
+  enablePunchEffect: 1
+  enableMaxPulseEffect: 1
 --- !u!114 &2054745305
 MonoBehaviour:
   m_ObjectHideFlags: 0
