@@ -46,10 +46,12 @@ public class MosquitoController : MonoBehaviour
     [SerializeField] private float dashBloodCost = 5.0f;
 
     [Header("대시 및 불릿 타임 설정")]
-    [SerializeField] private float dashSpeedMultiplier = 1.5f;
-    [SerializeField] private float dashDuration = 0.15f;
+    [Tooltip("대시 시 이동할 고정 거리 (유닛/미터)")]
+    [SerializeField] private float targetDashDistance = 2.5f;
+    [Tooltip("대시 및 불릿타임 지속 시간 (초)")]
+    [SerializeField] private float dashDuration = 0.28f;
     [SerializeField] private float slowTimeScale = 0.2f;
-    [SerializeField] private float dashCooldown = 0.6f;
+    [SerializeField] private float dashCooldown = 0.7f;
 
     private bool isDashing = false;
     public bool IsDashing => isDashing;
@@ -210,8 +212,10 @@ public class MosquitoController : MonoBehaviour
 
         if (isDashing)
         {
-            float dashSpeed = effectiveMoveSpeed * dashSpeedMultiplier;
-            rb.linearVelocity = currentDashDirection * (dashSpeed / Time.timeScale);
+            // 거리 고정 물리 보정: $v = \frac{D}{t}$, Time.timeScale로 보정하여 불릿타임 중 정확한 목표 거리 이동 보장
+            float safeDuration = Mathf.Max(0.05f, dashDuration);
+            float baseDashSpeed = targetDashDistance / safeDuration;
+            rb.linearVelocity = currentDashDirection * (baseDashSpeed / Time.timeScale);
             return;
         }
 
@@ -432,7 +436,7 @@ public class MosquitoController : MonoBehaviour
             animator.Play("IsDashing", 0, 0f);
         }
 
-        Debug.Log($"<color=yellow>[MosquitoController] ⚡ 닷지(대시) 발동! (슬로우모션 Time.timeScale = {Time.timeScale:F2}, 지속시간 = {dashDuration}s)</color>");
+        Debug.Log($"<color=yellow>[MosquitoController] ⚡ 불릿타임 대시 발동! (거리: {targetDashDistance}m, 시간: {dashDuration}s, 슬로우모션: {Time.timeScale:F2})</color>");
 
         yield return new WaitForSecondsRealtime(dashDuration);
 

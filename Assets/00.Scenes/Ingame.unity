@@ -1680,9 +1680,10 @@ MonoBehaviour:
   flightBloodDrainRate: 1.5
   dashBloodCost: 5
   dashSpeedMultiplier: 1.5
-  dashDuration: 0.15
+  targetDashDistance: 2.5
+  dashDuration: 0.28
   slowTimeScale: 0.2
-  dashCooldown: 0.6
+  dashCooldown: 0.7
   humanSkinLayer:
     serializedVersion: 2
     m_Bits: 8
