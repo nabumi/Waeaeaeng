@@ -463,7 +463,7 @@ public class MosquitoController : MonoBehaviour
         float offsetDistance = Mathf.Max(0.7f, mosquitoSize.x * 0.85f);
         dodgeObj.transform.position = transform.position + (backDirection * offsetDistance);
 
-        float effectDuration = Mathf.Max(0.2f, dashDuration);
+        float effectDuration = 1.0f; // [요청 반영] 1.0초 동안 유지
         float timer = 0f;
         Color initialColor = Color.white;
 
@@ -474,8 +474,13 @@ public class MosquitoController : MonoBehaviour
             
             if (sr != null)
             {
+                // 초반 0.6초는 선명하게(Alpha 0.9) 유지하다가 후반부에 부드럽게 페이드아웃
+                float alpha = progress < 0.6f 
+                    ? Mathf.Lerp(0.95f, 0.8f, progress / 0.6f) 
+                    : Mathf.Lerp(0.8f, 0f, (progress - 0.6f) / 0.4f);
+
                 Color c = initialColor;
-                c.a = Mathf.Lerp(0.85f, 0f, progress);
+                c.a = alpha;
                 sr.color = c;
             }
             yield return null;
