@@ -49,9 +49,9 @@ public class MosquitoController : MonoBehaviour
     [Tooltip("대시 시 이동할 고정 거리 (유닛/미터)")]
     [SerializeField] private float targetDashDistance = 2.5f;
     [Tooltip("대시 및 불릿타임 지속 시간 (초)")]
-    [SerializeField] private float dashDuration = 0.28f;
+    [SerializeField] private float dashDuration = 0.42f;
     [SerializeField] private float slowTimeScale = 0.2f;
-    [SerializeField] private float dashCooldown = 0.7f;
+    [SerializeField] private float dashCooldown = 0.85f;
 
     private bool isDashing = false;
     public bool IsDashing => isDashing;
