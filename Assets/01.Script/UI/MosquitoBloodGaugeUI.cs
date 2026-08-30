@@ -128,7 +128,7 @@ public class MosquitoBloodGaugeUI : MonoBehaviour
         {
             int currentInt = Mathf.CeilToInt(current);
             bloodText.SetText("{0} ml", currentInt);
-            bloodText.color = ratio < 0.25f ? criticalColor : Color.white;
+            bloodText.color = Color.white; // [요청 반영] 피가 부족해도 항상 흰색으로 선명하게 유지
         }
     }
 
