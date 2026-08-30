@@ -415,16 +415,14 @@ public class MosquitoController : MonoBehaviour
         Time.timeScale = effectiveSlow;
         Time.fixedDeltaTime = 0.02f * Time.timeScale;
 
-        // 애니메이터가 스프라이트를 매 프레임 덮어쓰지 못하도록 일시 비활성화
-        if (animator != null) animator.enabled = false;
-
-        // 닷지(대시) 스프라이트 적용
-        if (dodgeSprite != null && spriteRenderer != null)
+        // [요청 반영] 꼬리 뒤쪽(모기 본체 크기만큼 뒤)에 모기 크기의 1.5배 크기로 닷지 이펙트 생성
+        if (dodgeSprite != null)
         {
-            spriteRenderer.sprite = dodgeSprite;
+            StartCoroutine(SpawnDodgeEffectRoutine());
         }
 
         AudioManager.Instance?.PlaySFX(AudioManager.SFXType.Dash);
+        UpdateAnimationState();
 
         Debug.Log($"<color=yellow>[MosquitoController] ⚡ 닷지(대시) 발동! (슬로우모션 Time.timeScale = {Time.timeScale:F2}, 지속시간 = {dashDuration}s)</color>");
 
@@ -432,13 +430,51 @@ public class MosquitoController : MonoBehaviour
 
         isDashing = false;
         ResetTimeScale();
-
-        // 대시 종료 후 애니메이터 재개 및 비행 모션 복구
-        if (animator != null)
-        {
-            animator.enabled = true;
-        }
         UpdateAnimationState();
+    }
+
+    /// <summary>
+    /// 모기 꼬리 뒤쪽에 본체 크기(약 1.5유닛)만큼 뒤, 본체의 1.5배 크기로 dodge 잔상을 출력하고 자연스럽게 페이드아웃
+    /// </summary>
+    private IEnumerator SpawnDodgeEffectRoutine()
+    {
+        GameObject dodgeObj = new GameObject("DodgeEffect");
+        
+        // 꼬리 뒤쪽 위치 계산: 바라보는 방향의 반대쪽으로 모기 본체 크기(1.5f)만큼 뒤
+        Vector3 backDirection = isFacingRight ? Vector3.left : Vector3.right;
+        dodgeObj.transform.position = transform.position + (backDirection * 1.5f);
+        
+        // 모기 크기의 1.5배 크기 설정
+        float scaleMultiplier = 1.5f;
+        dodgeObj.transform.localScale = new Vector3(scaleMultiplier, scaleMultiplier, 1f);
+
+        SpriteRenderer sr = dodgeObj.AddComponent<SpriteRenderer>();
+        sr.sprite = dodgeSprite;
+        sr.sortingOrder = 9; // 모기 본체(10) 바로 뒤 레이어
+        sr.flipX = !isFacingRight; // 모기 방향과 일치
+
+        float effectDuration = Mathf.Max(0.2f, dashDuration);
+        float timer = 0f;
+        Color initialColor = Color.white;
+
+        while (timer < effectDuration)
+        {
+            timer += Time.unscaledDeltaTime;
+            float progress = Mathf.Clamp01(timer / effectDuration);
+            
+            if (sr != null)
+            {
+                Color c = initialColor;
+                c.a = Mathf.Lerp(1.0f, 0f, progress);
+                sr.color = c;
+            }
+            yield return null;
+        }
+
+        if (dodgeObj != null)
+        {
+            Destroy(dodgeObj);
+        }
     }
 
     private void ResetTimeScale()
