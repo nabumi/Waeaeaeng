@@ -1,19 +1,29 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
 /// <summary>
 /// 게임 전역 BGM, SFX, 모기 날갯짓 사운드를 통합 관리하는 싱글톤 오디오 매니저
-/// (Resources.Load 기반 100% 보장 로드 및 씬 진입 시 BGM 자동 재생 지원)
+/// (Resources.Load 기반 100% 보장 로드, 씬 전환 시 자동 사운드 정단 및 BGM 전환 지원)
 /// </summary>
 public class AudioManager : MonoBehaviour
 {
     private static AudioManager instance;
+    private static bool isQuitting = false; // 🛑 앱 종료/씬 언로드 시 유령 생성 방지 플래그
+
     public static AudioManager Instance
     {
         get
         {
+            // 씬이 언로드되거나 앱 종료 중이라면 절대로 새로 생성하지 않음
+            if (isQuitting)
+            {
+                Debug.LogWarning("[AudioManager] 앱 종료 또는 씬 이동 중으로 인스턴스 생성을 차단합니다.");
+                return null;
+            }
+
             if (instance == null)
             {
                 instance = FindAnyObjectByType<AudioManager>();
@@ -31,7 +41,7 @@ public class AudioManager : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void AutoInitialize()
     {
-        if (instance == null)
+        if (!isQuitting && instance == null)
         {
             var inst = Instance; // 인스턴스 자동 생성
         }
@@ -81,10 +91,14 @@ public class AudioManager : MonoBehaviour
 
     private void Awake()
     {
+        // ---------------------------------------------------------
+        // 1. [핵심] 중복 생성 방지 및 즉각적인 소음 차단
+        // ---------------------------------------------------------
         if (instance == null)
         {
             instance = this;
             DontDestroyOnLoad(gameObject);
+
             InitializeAudioSources();
             LoadAudioClipsFromResources();
             RegisterClips();
@@ -96,6 +110,10 @@ public class AudioManager : MonoBehaviour
         }
         else if (instance != this)
         {
+            // 중복 생성된 객체라면 즉시 모든 오디오 소스를 끄고 파괴 (소리 중복 방지)
+            AudioSource[] sources = GetComponents<AudioSource>();
+            foreach (var src in sources) src.enabled = false;
+
             Destroy(gameObject);
             return;
         }
@@ -116,14 +134,25 @@ public class AudioManager : MonoBehaviour
         CheckAndPlaySceneBGM(SceneManager.GetActiveScene().name);
     }
 
+    /// <summary>
+    /// 씬이 로드될 때마다 호출되는 콜백 (청소 + BGM 전환)
+    /// </summary>
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
+        // ---------------------------------------------------------
+        // 2. [핵심] 씬 이동 시 인게임 잔여 사운드 강제 정지 (청소 로직)
+        // ---------------------------------------------------------
+        StopMosquitoBuzz(); // 모기 날갯짓 소리 즉시 정지
+        if (sfxSource != null) sfxSource.Stop(); // 진행 중이던 단발성 SFX 정지
+
+        // 씬 이름에 따른 BGM 전환
         CheckAndPlaySceneBGM(scene.name);
     }
 
     private void CheckAndPlaySceneBGM(string sceneName)
     {
-        if (sceneName.IndexOf("Title", StringComparison.OrdinalIgnoreCase) >= 0)
+        if (sceneName.IndexOf("Title", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            sceneName.IndexOf("Lobby", StringComparison.OrdinalIgnoreCase) >= 0)
         {
             PlayLobbyBGM();
         }
@@ -140,7 +169,7 @@ public class AudioManager : MonoBehaviour
             bgmSource = gameObject.AddComponent<AudioSource>();
             bgmSource.loop = true;
             bgmSource.playOnAwake = false;
-            bgmSource.spatialBlend = 0f; // 2D 사운드
+            bgmSource.spatialBlend = 0f;
             bgmSource.volume = bgmVolume * masterVolume;
         }
 
@@ -149,7 +178,7 @@ public class AudioManager : MonoBehaviour
             sfxSource = gameObject.AddComponent<AudioSource>();
             sfxSource.loop = false;
             sfxSource.playOnAwake = false;
-            sfxSource.spatialBlend = 0f; // 2D 사운드
+            sfxSource.spatialBlend = 0f;
             sfxSource.volume = sfxVolume * masterVolume;
         }
 
@@ -158,14 +187,13 @@ public class AudioManager : MonoBehaviour
             mosquitoBuzzSource = gameObject.AddComponent<AudioSource>();
             mosquitoBuzzSource.loop = true;
             mosquitoBuzzSource.playOnAwake = false;
-            mosquitoBuzzSource.spatialBlend = 0f; // 2D 사운드
-            mosquitoBuzzSource.volume = 0.08f * sfxVolume * masterVolume; // 기존 0.4 대비 80% 감소
+            mosquitoBuzzSource.spatialBlend = 0f;
+            mosquitoBuzzSource.volume = GetCalculatedMosquitoVolume();
         }
     }
 
     private void LoadAudioClipsFromResources()
     {
-        // Resources/Audio 폴더에서 클립 로드
         if (inGameBGM == null) inGameBGM = Resources.Load<AudioClip>("Audio/bgm_ingame");
         if (lobbyBGM == null) lobbyBGM = Resources.Load<AudioClip>("Audio/lobbybgm");
         if (slapClip == null) slapClip = Resources.Load<AudioClip>("Audio/alex_jauk-slap-237622");
@@ -178,8 +206,6 @@ public class AudioManager : MonoBehaviour
         if (mosquitoBuzzClip == null) mosquitoBuzzClip = Resources.Load<AudioClip>("Audio/freesound_community-single-mosquito-buzz-69360");
         if (escapeReadyClip == null) escapeReadyClip = Resources.Load<AudioClip>("Audio/sfx_escape_ready");
         if (victoryClip == null) victoryClip = Resources.Load<AudioClip>("Audio/sfx_victory");
-
-        Debug.Log($"<color=green>[AudioManager] 오디오 클립 로드 완료 -> BGM: {(inGameBGM != null ? inGameBGM.name : "null")}, Slap: {(slapClip != null ? slapClip.name : "null")}, Dash: {(dashClip != null ? dashClip.name : "null")}, Victory: {(victoryClip != null ? victoryClip.name : "null")}</color>");
     }
 
     private void RegisterClips()
@@ -200,6 +226,8 @@ public class AudioManager : MonoBehaviour
     public void PlayBGM(AudioClip clip, bool loop = true)
     {
         if (clip == null || bgmSource == null) return;
+
+        // 이미 동일한 BGM이 재생 중이라면 리셋 없이 유지
         if (bgmSource.clip == clip && bgmSource.isPlaying) return;
 
         bgmSource.clip = clip;
@@ -207,7 +235,6 @@ public class AudioManager : MonoBehaviour
         bgmSource.spatialBlend = 0f;
         bgmSource.volume = bgmVolume * masterVolume;
         bgmSource.Play();
-        Debug.Log($"<color=cyan>[AudioManager] BGM 재생 시작: {clip.name}</color>");
     }
 
     public void StopBGM()
@@ -224,6 +251,7 @@ public class AudioManager : MonoBehaviour
     public void PlayLobbyBGM()
     {
         if (lobbyBGM != null) PlayBGM(lobbyBGM);
+        else Debug.LogWarning("[AudioManager] lobbyBGM 클립이 비어있습니다!");
     }
 
     public void PlaySFX(SFXType type, float volumeMultiplier = 1.0f, float pitch = 1.0f)
@@ -231,10 +259,6 @@ public class AudioManager : MonoBehaviour
         if (sfxClipMap.TryGetValue(type, out var clip) && clip != null)
         {
             PlaySFX(clip, volumeMultiplier, pitch);
-        }
-        else
-        {
-            Debug.LogWarning($"[AudioManager] SFXType '{type}'에 해당하는 오디오 클립이 없습니다.");
         }
     }
 
@@ -258,9 +282,8 @@ public class AudioManager : MonoBehaviour
         if (!mosquitoBuzzSource.isPlaying && mosquitoBuzzSource.clip != null)
         {
             mosquitoBuzzSource.spatialBlend = 0f;
-            mosquitoBuzzSource.volume = volume * sfxVolume * masterVolume;
+            mosquitoBuzzSource.volume = GetCalculatedMosquitoVolume(volume);
             mosquitoBuzzSource.Play();
-            Debug.Log("<color=cyan>[AudioManager] 모기 날갯짓 루프 재생 시작 (볼륨 0.08)</color>");
         }
     }
 
@@ -295,7 +318,16 @@ public class AudioManager : MonoBehaviour
     {
         if (bgmSource != null) bgmSource.volume = bgmVolume * masterVolume;
         if (sfxSource != null) sfxSource.volume = sfxVolume * masterVolume;
-        if (mosquitoBuzzSource != null) mosquitoBuzzSource.volume = 0.08f * sfxVolume * masterVolume;
+        if (mosquitoBuzzSource != null) mosquitoBuzzSource.volume = GetCalculatedMosquitoVolume();
+    }
+
+    /// <summary>
+    /// 모기 사운드 최종 볼륨 계산 공식
+    /// $V_{\text{Mosquito}} = \text{baseVolume} \times V_{\text{SFX}} \times V_{\text{Master}}$
+    /// </summary>
+    private float GetCalculatedMosquitoVolume(float baseVolume = 0.08f)
+    {
+        return baseVolume * sfxVolume * masterVolume;
     }
 
     public void ToggleMute(bool isMuted)
@@ -305,6 +337,19 @@ public class AudioManager : MonoBehaviour
         if (bgmSource != null) bgmSource.mute = isMuted;
         if (sfxSource != null) sfxSource.mute = isMuted;
         if (mosquitoBuzzSource != null) mosquitoBuzzSource.mute = isMuted;
+    }
+
+    private void OnApplicationQuit()
+    {
+        isQuitting = true;
+    }
+
+    private void OnDestroy()
+    {
+        if (instance == this)
+        {
+            isQuitting = true;
+        }
     }
 
     public float GetMasterVolume() => masterVolume;
